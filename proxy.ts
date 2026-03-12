@@ -1,32 +1,31 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
-const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
-  "/search(.*)",
-  "/analytics(.*)",
-  "/reports(.*)",
-  "/repo(.*)",
-]);
+const protectedPrefixes = ["/dashboard", "/search", "/analytics", "/reports", "/repo"];
 
-const isClerkConfigured = Boolean(process.env.CLERK_SECRET_KEY) &&
-  Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const isAuthConfigured =
+  Boolean(process.env.AUTH_GITHUB_ID) &&
+  Boolean(process.env.AUTH_GITHUB_SECRET) &&
+  Boolean(process.env.AUTH_SECRET);
 
-const passthrough = () => NextResponse.next();
+export default auth((req) => {
+  if (!isAuthConfigured) {
+    return;
+  }
 
-export default isClerkConfigured
-  ? clerkMiddleware(async (auth, request) => {
-      if (isProtectedRoute(request)) {
-        await auth.protect();
-      }
+  const { pathname, origin } = req.nextUrl;
 
-      return NextResponse.next();
-    })
-  : passthrough;
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/sign-in")) {
+    return;
+  }
+
+  if (protectedPrefixes.some((prefix) => pathname.startsWith(prefix)) && !req.auth) {
+    return Response.redirect(new URL("/sign-in", origin));
+  }
+});
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|ico|woff2?|ttf)).*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };

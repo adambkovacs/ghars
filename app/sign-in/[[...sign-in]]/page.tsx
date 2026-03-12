@@ -1,4 +1,5 @@
-import { SignIn } from "@clerk/nextjs";
+import { signIn } from "@/auth";
+import { appEnv } from "@/lib/env/app-env";
 
 export default function SignInPage() {
   return (
@@ -8,28 +9,36 @@ export default function SignInPage() {
           <p className="text-[0.75rem] font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
             GitHub portfolio radar
           </p>
-          <h1 className="font-display text-5xl leading-none tracking-tight text-white md:text-7xl">
-            Sign in, sync stars, build memory.
-          </h1>
+          <h1 className="font-display text-5xl leading-none tracking-tight text-white md:text-7xl">Connect GitHub, sync stars, build memory.</h1>
           <p className="max-w-2xl text-base text-slate-300/85 md:text-lg">
-            ghars turns starred repos into a living observability layer with notes, momentum, drift,
-            and scheduled refresh for the repos you actually start using.
+            ghars uses GitHub-only sign-in. Authenticate once, import your starred repos, and turn that pile of forgotten tabs into a living observability layer.
           </p>
         </section>
 
         <div className="glass-panel rounded-[2rem] border border-white/10 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-6">
-          <SignIn
-            routing="path"
-            path="/sign-in"
-            fallbackRedirectUrl="/dashboard"
-            signUpUrl="/sign-up"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                card: "shadow-none bg-transparent",
-              },
-            }}
-          />
+          {appEnv.isGitHubAuthConfigured ? (
+            <form
+              action={async () => {
+                "use server";
+                await signIn("github", { redirectTo: "/dashboard" });
+              }}
+              className="space-y-4"
+            >
+              <p className="text-sm text-slate-300/80">
+                GitHub is the only sign-in method in v1 because the product has no value without GitHub import.
+              </p>
+              <button className="w-full rounded-[1.4rem] bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-5 py-3 text-base font-semibold text-slate-950 transition hover:translate-y-[-1px]">
+                Continue with GitHub
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-3 rounded-[1.5rem] border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+              <p className="font-semibold uppercase tracking-[0.2em] text-amber-200/80">Auth setup pending</p>
+              <p>
+                Add `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, and `AUTH_SECRET` to enable GitHub login.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </main>

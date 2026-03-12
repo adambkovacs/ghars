@@ -3,7 +3,7 @@ import { query } from "./_generated/server";
 
 export const searchNotes = query({
   args: {
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     query: v.string(),
   },
   returns: v.array(
@@ -16,7 +16,7 @@ export const searchNotes = query({
     const notes = await ctx.db
       .query("userNotes")
       .withSearchIndex("search_body", (q) =>
-        q.search("body", args.query).eq("clerkUserId", args.clerkUserId)
+        q.search("body", args.query).eq("authUserId", args.authUserId)
       )
       .take(20);
 

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Activity, Compass, Command, FileClock, Orbit, Sparkles } from "lucide-react";
 import { clsx } from "clsx";
-import { appEnv } from "@/lib/env/app-env";
 
 const navItems = [
   { href: "/", label: "Overview", icon: Compass },
@@ -108,10 +107,10 @@ export function AppChrome({ title, subtitle, eyebrow, badge, children }: AppChro
                   Open command search
                 </Link>
                 <Link
-                  href={appEnv.isClerkConfigured ? "/sign-in" : "/dashboard"}
+                  href="/sign-in"
                   className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-orange-400 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_16px_36px_rgba(249,115,22,0.32)] transition hover:translate-y-[-1px]"
                 >
-                  {appEnv.isClerkConfigured ? "Sign in with GitHub" : "Open demo mode"}
+                  Connect GitHub
                 </Link>
               </div>
             </div>

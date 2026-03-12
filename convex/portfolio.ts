@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 export const getDashboardData = query({
-  args: { clerkUserId: v.string() },
+  args: { authUserId: v.string() },
   returns: v.object({
     repoCount: v.number(),
     noteCount: v.number(),
@@ -11,17 +11,17 @@ export const getDashboardData = query({
   handler: async (ctx, args) => {
     const userRepoStates = await ctx.db
       .query("userRepoStates")
-      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", args.authUserId))
       .collect();
 
     const notes = await ctx.db
       .query("userNotes")
-      .withIndex("by_clerkUserId_repoId", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("by_authUserId_repoId", (q) => q.eq("authUserId", args.authUserId))
       .collect();
 
     const reports = await ctx.db
       .query("reportSnapshots")
-      .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", args.authUserId))
       .collect();
 
     return {
@@ -34,7 +34,7 @@ export const getDashboardData = query({
 
 export const changeRepoState = mutation({
   args: {
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     repoId: v.id("repoCatalog"),
     state: v.union(
       v.literal("saved"),
@@ -47,8 +47,8 @@ export const changeRepoState = mutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("userRepoStates")
-      .withIndex("by_clerkUserId_repoId", (q) =>
-        q.eq("clerkUserId", args.clerkUserId).eq("repoId", args.repoId)
+      .withIndex("by_authUserId_repoId", (q) =>
+        q.eq("authUserId", args.authUserId).eq("repoId", args.repoId)
       )
       .unique();
 
@@ -63,7 +63,7 @@ export const changeRepoState = mutation({
     });
 
     await ctx.db.insert("portfolioEvents", {
-      clerkUserId: args.clerkUserId,
+      authUserId: args.authUserId,
       repoId: args.repoId,
       type: "state_changed",
       metadata: { state: args.state },
@@ -76,14 +76,14 @@ export const changeRepoState = mutation({
 
 export const addNote = mutation({
   args: {
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     repoId: v.id("repoCatalog"),
     body: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.insert("userNotes", {
-      clerkUserId: args.clerkUserId,
+      authUserId: args.authUserId,
       repoId: args.repoId,
       body: args.body,
       createdAt: Date.now(),
@@ -91,8 +91,8 @@ export const addNote = mutation({
 
     const state = await ctx.db
       .query("userRepoStates")
-      .withIndex("by_clerkUserId_repoId", (q) =>
-        q.eq("clerkUserId", args.clerkUserId).eq("repoId", args.repoId)
+      .withIndex("by_authUserId_repoId", (q) =>
+        q.eq("authUserId", args.authUserId).eq("repoId", args.repoId)
       )
       .unique();
 
@@ -105,7 +105,7 @@ export const addNote = mutation({
     }
 
     await ctx.db.insert("portfolioEvents", {
-      clerkUserId: args.clerkUserId,
+      authUserId: args.authUserId,
       repoId: args.repoId,
       type: "note_added",
       createdAt: Date.now(),

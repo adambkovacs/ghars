@@ -19,7 +19,7 @@ const portfolioEventType = v.union(
 
 export default defineSchema({
   githubConnections: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     githubUserId: v.string(),
     githubLogin: v.string(),
     accessToken: v.optional(v.string()),
@@ -28,7 +28,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_clerkUserId", ["clerkUserId"])
+    .index("by_authUserId", ["authUserId"])
     .index("by_githubUserId", ["githubUserId"]),
 
   repoCatalog: defineTable({
@@ -59,7 +59,7 @@ export default defineSchema({
     }),
 
   userRepoStates: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     repoId: v.id("repoCatalog"),
     state: repoState,
     starredAt: v.number(),
@@ -71,32 +71,32 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_clerkUserId_repoId", ["clerkUserId", "repoId"])
-    .index("by_clerkUserId_state", ["clerkUserId", "state"]),
+    .index("by_authUserId", ["authUserId"])
+    .index("by_authUserId_repoId", ["authUserId", "repoId"])
+    .index("by_authUserId_state", ["authUserId", "state"]),
 
   userNotes: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     repoId: v.id("repoCatalog"),
     body: v.string(),
     createdAt: v.number(),
   })
-    .index("by_clerkUserId_repoId", ["clerkUserId", "repoId"])
+    .index("by_authUserId_repoId", ["authUserId", "repoId"])
     .searchIndex("search_body", {
       searchField: "body",
-      filterFields: ["clerkUserId"],
+      filterFields: ["authUserId"],
     }),
 
   portfolioEvents: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     repoId: v.optional(v.id("repoCatalog")),
     type: portfolioEventType,
     metadata: v.optional(v.any()),
     createdAt: v.number(),
   })
-    .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_clerkUserId_type", ["clerkUserId", "type"])
-    .index("by_clerkUserId_repoId", ["clerkUserId", "repoId"]),
+    .index("by_authUserId", ["authUserId"])
+    .index("by_authUserId_type", ["authUserId", "type"])
+    .index("by_authUserId_repoId", ["authUserId", "repoId"]),
 
   repoSnapshots: defineTable({
     repoId: v.id("repoCatalog"),
@@ -113,7 +113,7 @@ export default defineSchema({
     .index("by_repoId_capturedAt", ["repoId", "capturedAt"]),
 
   repoClusters: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     clusterKey: v.string(),
     name: v.string(),
     narrative: v.optional(v.string()),
@@ -122,20 +122,20 @@ export default defineSchema({
     momentumScore: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_clerkUserId_clusterKey", ["clerkUserId", "clusterKey"]),
+    .index("by_authUserId", ["authUserId"])
+    .index("by_authUserId_clusterKey", ["authUserId", "clusterKey"]),
 
   savedViews: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     name: v.string(),
     query: v.string(),
     filters: v.any(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_clerkUserId", ["clerkUserId"]),
+  }).index("by_authUserId", ["authUserId"]),
 
   reportSnapshots: defineTable({
-    clerkUserId: v.string(),
+    authUserId: v.string(),
     period: v.union(v.literal("weekly"), v.literal("monthly")),
     title: v.string(),
     summary: v.string(),
@@ -143,6 +143,6 @@ export default defineSchema({
     topRepoIds: v.array(v.id("repoCatalog")),
     generatedAt: v.number(),
   })
-    .index("by_clerkUserId", ["clerkUserId"])
-    .index("by_clerkUserId_period", ["clerkUserId", "period"]),
+    .index("by_authUserId", ["authUserId"])
+    .index("by_authUserId_period", ["authUserId", "period"]),
 });

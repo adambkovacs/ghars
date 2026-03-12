@@ -10,7 +10,7 @@ test("renders the dashboard-first landing page and primary navigation", async ({
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /open dashboard/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /open command search/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /open demo mode|sign in with github/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /connect github/i })).toBeVisible();
   const nav = page.getByRole("navigation");
   await expect(nav.getByRole("link", { name: "Dashboard" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Search" })).toBeVisible();

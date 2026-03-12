@@ -1,8 +1,6 @@
 "use client";
 
-import { ClerkProvider, useAuth } from "@clerk/nextjs";
-import { ConvexReactClient } from "convex/react";
-import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { type ReactNode, useEffect } from "react";
 import Lenis from "lenis";
 import { appEnv } from "@/lib/env/app-env";
@@ -35,7 +33,7 @@ function LenisBoot() {
 }
 
 export function AppProviders({ children }: { children: ReactNode }) {
-  if (!appEnv.isClerkConfigured || !convexClient) {
+  if (!convexClient) {
     return (
       <>
         <LenisBoot />
@@ -45,11 +43,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ClerkProvider signInFallbackRedirectUrl="/dashboard" signUpFallbackRedirectUrl="/dashboard">
-      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
-        <LenisBoot />
-        {children}
-      </ConvexProviderWithClerk>
-    </ClerkProvider>
+    <ConvexProvider client={convexClient}>
+      <LenisBoot />
+      {children}
+    </ConvexProvider>
   );
 }

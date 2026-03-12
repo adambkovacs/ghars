@@ -4,8 +4,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   NEXT_PUBLIC_CONVEX_URL: z.string().url().optional(),
   CONVEX_DEPLOYMENT: z.string().optional(),
-  CLERK_SECRET_KEY: z.string().optional(),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
+  CONVEX_DEPLOY_KEY: z.string().optional(),
+  AUTH_SECRET: z.string().optional(),
+  AUTH_GITHUB_ID: z.string().optional(),
+  AUTH_GITHUB_SECRET: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_TEXT_MODEL: z.string().default("openai/gpt-4.1-mini"),
   OPENROUTER_EMBED_MODEL: z.string().default("openai/text-embedding-3-small"),
@@ -24,8 +26,10 @@ const rawEnv = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
   CONVEX_DEPLOYMENT: process.env.CONVEX_DEPLOYMENT,
-  CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY,
+  AUTH_SECRET: process.env.AUTH_SECRET,
+  AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
+  AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
   OPENROUTER_EMBED_MODEL: process.env.OPENROUTER_EMBED_MODEL,
@@ -42,11 +46,13 @@ export const appEnv = {
   isDemoMode:
     parsedEnv.GHARS_DEMO_MODE ||
     parsedEnv.E2E_TEST_MODE ||
-    !parsedEnv.NEXT_PUBLIC_CONVEX_URL ||
-    !parsedEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-  isClerkConfigured:
-    Boolean(parsedEnv.CLERK_SECRET_KEY) && Boolean(parsedEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
+    !parsedEnv.CONVEX_DEPLOYMENT ||
+    !parsedEnv.NEXT_PUBLIC_CONVEX_URL,
   isConvexConfigured: Boolean(parsedEnv.CONVEX_DEPLOYMENT) && Boolean(parsedEnv.NEXT_PUBLIC_CONVEX_URL),
+  isGitHubAuthConfigured:
+    Boolean(parsedEnv.AUTH_SECRET) &&
+    Boolean(parsedEnv.AUTH_GITHUB_ID) &&
+    Boolean(parsedEnv.AUTH_GITHUB_SECRET),
   isAiConfigured: Boolean(parsedEnv.OPENROUTER_API_KEY),
 };
 
