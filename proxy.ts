@@ -1,21 +1,15 @@
 import { auth } from "@/auth";
-
-const protectedPrefixes = ["/dashboard", "/search", "/analytics", "/reports", "/repo"];
+import { resolveRouteAccess } from "@/lib/services";
 
 export default auth((req) => {
   const { pathname, origin } = req.nextUrl;
+  const access = resolveRouteAccess({
+    pathname,
+    isAuthenticated: Boolean(req.auth),
+  });
 
-  if (
-    pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/sign-in") ||
-    pathname.startsWith("/sign-up") ||
-    pathname.startsWith("/login")
-  ) {
-    return;
-  }
-
-  if (protectedPrefixes.some((prefix) => pathname.startsWith(prefix)) && !req.auth) {
-    return Response.redirect(new URL("/sign-in", origin));
+  if (access.action === "redirect") {
+    return Response.redirect(new URL(access.location, origin));
   }
 });
 

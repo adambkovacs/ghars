@@ -8,4 +8,5 @@ export * from "@/lib/services/computeMomentumScore";
 export * from "@/lib/services/generateNeglectSignals";
 export * from "@/lib/services/generateReports";
 export * from "@/lib/services/importStarredRepos";
+export * from "@/lib/services/resolveRouteAccess";
 export * from "@/lib/services/searchPortfolio";

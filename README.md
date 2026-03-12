@@ -20,6 +20,8 @@ The repo includes:
 - pure domain services and tests for search, notes, import, analytics, and reports
 - Convex schema and adapter scaffolding for production data flows
 - Auth.js GitHub-only auth scaffolding with App Router handlers and protected-route proxy
+- a live dashboard import slice driven by the signed-in session and the existing import service
+- a test-mode login and import path for end-to-end coverage in Playwright
 - live GitHub repo and Vercel deployment infrastructure
 
 ## Environment
@@ -39,6 +41,12 @@ Required for production:
 Optional during development:
 
 - `GHARS_DEMO_MODE=true`
+
+## Verification
+
+- `bun run test` covers the pure service layer, including route access policy
+- `bun run test:e2e` covers the public landing, protected-route redirects, `/login` aliasing, and a full sign-in plus import flow in `E2E_TEST_MODE`
+- Real GitHub OAuth in production still requires `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`
 
 ## Product decisions
 

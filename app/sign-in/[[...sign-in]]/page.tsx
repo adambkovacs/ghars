@@ -23,7 +23,22 @@ export default async function SignInPage() {
         </section>
 
         <div className="glass-panel rounded-[2rem] border border-white/10 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-6">
-          {appEnv.isGitHubAuthConfigured ? (
+          {appEnv.E2E_TEST_MODE ? (
+            <form
+              action={async () => {
+                "use server";
+                await signIn("e2e", { redirectTo: "/dashboard" });
+              }}
+              className="space-y-4"
+            >
+              <p className="text-sm text-slate-300/80">
+                Test mode bypasses GitHub OAuth and uses a deterministic fake portfolio import path for end-to-end coverage.
+              </p>
+              <button className="w-full rounded-[1.4rem] bg-gradient-to-r from-emerald-300 via-teal-400 to-cyan-500 px-5 py-3 text-base font-semibold text-slate-950 transition hover:translate-y-[-1px]">
+                Continue in test mode
+              </button>
+            </form>
+          ) : appEnv.isGitHubAuthConfigured ? (
             <form
               action={async () => {
                 "use server";

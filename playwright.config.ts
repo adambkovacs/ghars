@@ -28,7 +28,6 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       E2E_TEST_MODE: "true",
-      GHARS_DEMO_MODE: "true",
     },
   },
 });

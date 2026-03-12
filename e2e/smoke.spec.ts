@@ -31,3 +31,19 @@ test("supports a login alias that resolves to the sign-in flow", async ({ page }
   await expect(page).toHaveURL(/\/sign-in$/);
   await expect(page.getByRole("heading", { name: /connect github, sync stars, build memory/i })).toBeVisible();
 });
+
+test("signs in and imports a portfolio in test mode", async ({ page }) => {
+  await page.goto("/sign-in");
+
+  await page.getByRole("button", { name: /continue in test mode/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: /your github stars as a living portfolio/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /import starred repos/i })).toBeVisible();
+
+  await page.getByRole("button", { name: /import starred repos/i }).click();
+
+  await expect(page.getByText(/import complete/i)).toBeVisible();
+  await expect(page.getByText(/11 repos synced/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /apify\/crawlee/i })).toBeVisible();
+});
