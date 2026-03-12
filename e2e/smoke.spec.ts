@@ -1,27 +1,33 @@
 import { expect, test } from "@playwright/test";
 
-test("renders the dashboard-first landing page and primary navigation", async ({ page }) => {
+test("renders a signed-out landing page without portfolio data", async ({ page }) => {
   await page.goto("/");
 
   await expect(
     page.getByRole("heading", {
-      name: /see the shape of your starred universe before it slips out of reach/i,
+      name: /your github stars deserve a private observability layer/i,
     })
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /open dashboard/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /open command search/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /connect github/i })).toBeVisible();
-  const nav = page.getByRole("navigation");
-  await expect(nav.getByRole("link", { name: "Dashboard" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Search" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Reports" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /open login/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /continue with github/i })).toBeVisible();
+  await expect(page.getByText(/private by default/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: /see the shape of your starred universe before it slips out of reach/i,
+    })
+  ).toHaveCount(0);
 });
 
-test("shows the demo dashboard shell with portfolio modules", async ({ page }) => {
+test("redirects anonymous users away from protected dashboard surfaces", async ({ page }) => {
   await page.goto("/dashboard");
 
-  await expect(page.getByText(/portfolio overview/i)).toBeVisible();
-  await expect(page.getByText(/momentum strip/i)).toBeVisible();
-  await expect(page.getByText(/portfolio health/i)).toBeVisible();
-  await expect(page.getByText(/temporal drift/i)).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("heading", { name: /connect github, sync stars, build memory/i })).toBeVisible();
+});
+
+test("supports a login alias that resolves to the sign-in flow", async ({ page }) => {
+  await page.goto("/login");
+
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("heading", { name: /connect github, sync stars, build memory/i })).toBeVisible();
 });

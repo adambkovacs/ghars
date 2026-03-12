@@ -2,19 +2,15 @@ import { auth } from "@/auth";
 
 const protectedPrefixes = ["/dashboard", "/search", "/analytics", "/reports", "/repo"];
 
-const isAuthConfigured =
-  Boolean(process.env.AUTH_GITHUB_ID) &&
-  Boolean(process.env.AUTH_GITHUB_SECRET) &&
-  Boolean(process.env.AUTH_SECRET);
-
 export default auth((req) => {
-  if (!isAuthConfigured) {
-    return;
-  }
-
   const { pathname, origin } = req.nextUrl;
 
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/sign-in")) {
+  if (
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/login")
+  ) {
     return;
   }
 

@@ -11,6 +11,8 @@ Build `ghars` as a dashboard-first GitHub stars observability product with memor
 - Core domain logic is separated from UI and storage.
 - GitHub repo and Vercel project are live, but the app still needs real GitHub import wiring.
 - Convex production schema and functions are deployed.
+- Signed-out users now see a public landing page, not the demo dashboard shell.
+- Protected app routes redirect anonymous traffic to `/sign-in`, and `/login` now resolves to that flow too.
 
 ## Follow-up
 

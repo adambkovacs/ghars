@@ -1,195 +1,115 @@
 import Link from "next/link";
-import { ArrowRight, Clock4, Radar } from "lucide-react";
-import { AppChrome } from "@/components/layout/app-chrome";
-import { SectionCard } from "@/components/layout/section-card";
-import { AnimatedValue } from "@/components/charts/animated-value";
-import { Sparkline } from "@/components/charts/sparkline";
-import { StateRing } from "@/components/charts/state-ring";
-import { ConstellationPreview } from "@/components/charts/constellation-preview";
-import {
-  demoClusters,
-  demoEvents,
-  demoMomentumTimeline,
-  getOverviewMetrics,
-  getTopMomentumRepos,
-} from "@/lib/demo/data";
+import { redirect } from "next/navigation";
+import { ArrowRight, Lock, Radar, Search, Sparkles } from "lucide-react";
+import { auth } from "@/auth";
 
-export default function HomePage() {
-  const overview = getOverviewMetrics();
-  const topRepos = getTopMomentumRepos(3);
+const featureCards = [
+  {
+    icon: Lock,
+    title: "Private by default",
+    description: "No portfolio surfaces are exposed before sign-in. Public traffic gets a landing page, not your repo universe.",
+  },
+  {
+    icon: Search,
+    title: "Recover what you starred",
+    description: "Find the repo you saw three days ago by name, topic, note, or the reason you cared in the first place.",
+  },
+  {
+    icon: Radar,
+    title: "Track movement, not just counts",
+    description: "See heat, drift, neglect, and momentum across the repos you actually revisit and start using.",
+  },
+];
+
+export default async function HomePage() {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect("/dashboard");
+  }
 
   return (
-    <AppChrome
-      eyebrow="Portfolio observability"
-      title="See the shape of your starred universe before it slips out of reach."
-      subtitle="ghars turns GitHub stars into a living control room. Follow cluster drift, spot heat, recover forgotten repos, and attach memory to the things you actually mean to build with."
-      badge="Demo portfolio"
-    >
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <SectionCard
-          eyebrow="Now"
-          title="A dashboard first product, not a nicer bookmarks list"
-          description="The front page should already tell you what kind of technical person you have been this month."
-          action={
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.08]"
-            >
-              Open dashboard
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          }
-        >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[
-              { label: "Imported stars", value: overview.total, suffix: "", tone: "text-white" },
-              { label: "Annotated", value: overview.annotated, suffix: "", tone: "text-cyan-200" },
-              { label: "Started", value: overview.started, suffix: "", tone: "text-amber-200" },
-              { label: "Watching", value: overview.watching, suffix: "", tone: "text-emerald-200" },
-              { label: "Parked", value: overview.parked, suffix: "", tone: "text-violet-200" },
-              { label: "Neglected", value: overview.neglected, suffix: "", tone: "text-rose-200" },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-[1.6rem] border border-white/8 bg-slate-950/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-              >
-                <p className="text-[0.72rem] uppercase tracking-[0.24em] text-slate-400">{item.label}</p>
-                <AnimatedValue value={item.value} className={`mt-3 block text-4xl font-semibold ${item.tone}`} />
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-            <div className="rounded-[1.8rem] border border-cyan-300/12 bg-gradient-to-br from-cyan-300/10 via-sky-400/8 to-transparent p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-[0.24em] text-cyan-100/70">Weekly pulse</p>
-                  <h3 className="mt-1 text-lg font-semibold text-white">Momentum across the last seven days</h3>
-                </div>
-                <Radar className="h-5 w-5 text-cyan-200" />
-              </div>
-              <div className="mt-4 h-40">
-                <Sparkline points={demoMomentumTimeline.map((point) => point.value)} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {demoMomentumTimeline.map((point) => (
-                  <span
-                    key={point.label}
-                    className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[0.7rem] uppercase tracking-[0.18em] text-slate-300"
-                  >
-                    {point.label} {point.value}
-                  </span>
-                ))}
-              </div>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#123660_0%,#091120_38%,#04070f_100%)] px-6 py-10 text-white">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col justify-center gap-14">
+        <section className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
+              <Sparkles className="h-4 w-4" />
+              Private GitHub portfolio radar
             </div>
 
-            <div className="rounded-[1.8rem] border border-white/8 bg-slate-950/45 p-4">
-              <div className="flex items-center gap-3">
-                <Clock4 className="h-5 w-5 text-amber-200" />
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-[0.24em] text-amber-100/70">Cluster weight</p>
-                  <h3 className="text-lg font-semibold text-white">Where attention is concentrating</h3>
-                </div>
-              </div>
-              <div className="mt-4">
-                <StateRing
-                  segments={demoClusters.map((cluster) => ({
-                    label: cluster.name,
-                    value: cluster.repoCount,
-                    color: cluster.accent,
-                  }))}
-                />
-              </div>
+            <div className="space-y-5">
+              <h1 className="font-display text-5xl leading-none tracking-tight text-white md:text-7xl">
+                Your GitHub stars deserve a private observability layer.
+              </h1>
+              <p className="max-w-2xl text-base text-slate-300/85 md:text-lg">
+                ghars is for the repo graveyard problem. Sign in with GitHub, import your stars, and turn a pile of forgotten saves into a dashboard you can actually use.
+              </p>
             </div>
-          </div>
-        </SectionCard>
 
-        <SectionCard
-          eyebrow="Signature surface"
-          title="Constellation preview"
-          description="One visual statement, one use. The 3D surface is reserved for seeing cluster gravity and heat, not for routine navigation."
-        >
-          <ConstellationPreview items={topRepos.map((repo) => ({ cluster: repo.cluster, importance: repo.importance, momentum: repo.momentum }))} />
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {topRepos.map((repo) => (
-              <div key={repo.fullName} className="rounded-[1.4rem] border border-white/8 bg-white/[0.025] p-3">
-                <p className="text-[0.65rem] uppercase tracking-[0.24em] text-slate-400">{repo.cluster}</p>
-                <p className="mt-1 font-medium text-white">{repo.fullName}</p>
-                <p className="mt-2 text-sm text-slate-300/80">{repo.summary}</p>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <SectionCard
-          eyebrow="Active heat"
-          title="Repos pulling the portfolio forward"
-          description="These are not just popular. They are moving, and you are touching them."
-        >
-          <div className="space-y-4">
-            {topRepos.map((repo, index) => (
+            <div className="flex flex-wrap gap-3">
               <Link
-                key={repo.fullName}
-                href={`/repo/${repo.owner}/${repo.name}`}
-                className="flex items-center justify-between gap-4 rounded-[1.6rem] border border-white/8 bg-white/[0.03] px-4 py-4 transition hover:border-cyan-300/25"
+                href="/sign-in"
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:translate-y-[-1px]"
               >
-                <div className="flex items-center gap-4">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/[0.05] text-sm font-semibold text-slate-300">
-                    0{index + 1}
-                  </span>
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{repo.cluster}</p>
-                    <p className="text-lg font-semibold text-white">{repo.fullName}</p>
-                    <p className="text-sm text-slate-300/80">{repo.summary}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[0.7rem] uppercase tracking-[0.22em] text-cyan-100/70">Momentum</p>
-                  <p className="mt-1 text-2xl font-semibold text-cyan-100">{repo.momentum}</p>
-                </div>
+                Continue with GitHub
+                <ArrowRight className="h-4 w-4" />
               </Link>
-            ))}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          eyebrow="Signal tape"
-          title="Recent changes and human context"
-          description="This should feel like the top of an instrument panel, not a changelog."
-          action={
-            <Link
-              href="/reports"
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white transition hover:border-white/20 hover:bg-white/[0.07]"
-            >
-              Weekly reports
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          }
-        >
-          <div className="space-y-3">
-            {demoEvents.map((event) => (
-              <div
-                key={`${event.repo}-${event.timestamp}`}
-                className="rounded-[1.6rem] border border-white/8 bg-white/[0.025] p-4"
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/[0.08]"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-[0.24em] text-slate-400">{event.type}</p>
-                    <h3 className="mt-1 font-semibold text-white">{event.title}</h3>
-                    <p className="mt-2 text-sm text-slate-300/80">{event.detail}</p>
-                  </div>
-                  <div className="text-right text-xs uppercase tracking-[0.18em] text-slate-500">
-                    <p>{event.repo}</p>
-                    <p className="mt-1">{new Date(event.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+                Open login
+              </Link>
+            </div>
           </div>
-        </SectionCard>
+
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.26em] text-amber-200/80">
+              Why this page is public
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-white">You should not leak portfolio context before login.</h2>
+            <p className="mt-4 text-sm leading-6 text-slate-300/85">
+              The signed-out experience is now a clean front door. Dashboard views, repo detail pages, analytics, reporting, and search stay behind auth.
+            </p>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          {featureCards.map((card) => {
+            const Icon = card.icon;
+
+            return (
+              <article
+                key={card.title}
+                className="rounded-[1.8rem] border border-white/10 bg-white/[0.035] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.05] text-cyan-100">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="mt-5 text-xl font-semibold text-white">{card.title}</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-300/82">{card.description}</p>
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="max-w-2xl">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.26em] text-slate-400">Current product model</p>
+              <h2 className="mt-3 text-2xl font-semibold text-white">Dashboard first, memory second, search everywhere.</h2>
+              <p className="mt-4 text-sm leading-6 text-slate-300/82">
+                After sign-in, ghars imports your GitHub stars and turns them into a private control room for recall, trend tracking, and portfolio analysis.
+              </p>
+            </div>
+
+            <div className="rounded-[1.6rem] border border-emerald-300/20 bg-emerald-300/10 px-5 py-4 text-sm text-emerald-100">
+              GitHub-only login in v1. No email flow, no public portfolio pages.
+            </div>
+          </div>
+        </section>
       </div>
-    </AppChrome>
+    </main>
   );
 }

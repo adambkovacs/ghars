@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { IBM_Plex_Sans, Syne, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { auth, signIn, signOut } from "@/auth";
+import { auth, signOut } from "@/auth";
 import { AppProviders } from "@/components/providers/app-providers";
 import { appEnv } from "@/lib/env/app-env";
 
@@ -62,21 +63,13 @@ export default async function RootLayout({
                     Sign out
                   </button>
                 </form>
-              ) : appEnv.isGitHubAuthConfigured ? (
-                <form
-                  action={async () => {
-                    "use server";
-                    await signIn("github", { redirectTo: "/dashboard" });
-                  }}
-                >
-                  <button className="rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:translate-y-[-1px]">
-                    Sign in with GitHub
-                  </button>
-                </form>
               ) : (
-                <div className="rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-sm font-medium text-amber-100">
-                  Add `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, and `AUTH_SECRET`
-                </div>
+                <Link
+                  href="/sign-in"
+                  className="rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:translate-y-[-1px]"
+                >
+                  Login
+                </Link>
               )}
             </div>
           </div>

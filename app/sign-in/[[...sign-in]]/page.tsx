@@ -1,7 +1,14 @@
-import { signIn } from "@/auth";
+import { redirect } from "next/navigation";
+import { auth, signIn } from "@/auth";
 import { appEnv } from "@/lib/env/app-env";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#123660_0%,#091120_38%,#04070f_100%)] px-6 py-10 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-10 lg:grid lg:grid-cols-[1.1fr_0.9fr]">
