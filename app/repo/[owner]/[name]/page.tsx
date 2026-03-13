@@ -1,9 +1,10 @@
+import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { AppChrome } from "@/components/layout/app-chrome";
 import { SectionCard } from "@/components/layout/section-card";
-import { Sparkline } from "@/components/charts/sparkline";
-import { getRepo } from "@/lib/demo/data";
+import { getPortfolioRuntime } from "@/lib/server/portfolio/runtime";
 
 type RepoPageProps = {
   params: Promise<{
@@ -13,19 +14,52 @@ type RepoPageProps = {
 };
 
 export default async function RepoPage({ params }: RepoPageProps) {
-  const { owner, name } = await params;
-  const repo = getRepo(owner, name);
+  const session = await auth();
 
-  if (!repo) {
+  if (!session?.user?.id) {
+    redirect("/sign-in");
+  }
+
+  const { owner, name } = await params;
+  const detail = await getPortfolioRuntime().getRepoDetailModel(session.user.id, owner, name);
+
+  if (!detail.hasImport) {
+    return (
+      <AppChrome
+        eyebrow="Repo detail"
+        title="Import your portfolio first"
+        subtitle="Repo detail pages unlock after ghars has imported your own starred repositories."
+        badge="Awaiting first import"
+      >
+        <SectionCard
+          eyebrow="Onboarding"
+          title="No imported portfolio yet"
+          description="This route is now tied to the signed-in user's imported data, not the old demo catalog."
+        >
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:translate-y-[-1px]"
+          >
+            Go to dashboard import
+          </Link>
+        </SectionCard>
+      </AppChrome>
+    );
+  }
+
+  if (!detail.repo || !detail.state) {
     notFound();
   }
 
+  const repo = detail.repo;
+  const state = detail.state;
+
   return (
     <AppChrome
-      eyebrow={repo.cluster}
+      eyebrow="Repo detail"
       title={repo.fullName}
       subtitle={repo.description}
-      badge={repo.state}
+      badge={state.state}
     >
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SectionCard
@@ -34,7 +68,9 @@ export default async function RepoPage({ params }: RepoPageProps) {
           description="A repo page should explain presence, not just mirror GitHub facts."
         >
           <div className="space-y-4">
-            <p className="text-base text-slate-200/85">{repo.summary}</p>
+            <p className="text-base text-slate-200/85">
+              Imported into {detail.githubLogin ?? "this portfolio"} and currently tracked as `{state.state}`.
+            </p>
             <div className="flex flex-wrap gap-2">
               {repo.topics.map((topic) => (
                 <span
@@ -48,11 +84,11 @@ export default async function RepoPage({ params }: RepoPageProps) {
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Language</p>
-                <p className="mt-2 text-2xl font-semibold text-white">{repo.language}</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{repo.language ?? "Unknown"}</p>
               </div>
               <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
-                <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Momentum</p>
-                <p className="mt-2 text-2xl font-semibold text-cyan-100">{repo.momentum}</p>
+                <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Stars</p>
+                <p className="mt-2 text-2xl font-semibold text-cyan-100">{repo.stargazerCount.toLocaleString()}</p>
               </div>
             </div>
           </div>
@@ -71,21 +107,18 @@ export default async function RepoPage({ params }: RepoPageProps) {
             </Link>
           }
         >
-          <div className="h-52">
-            <Sparkline points={repo.sparkline} />
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Stars / 7d</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{repo.starDelta7d}</p>
+              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Forks</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{repo.forksCount.toLocaleString()}</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Forks / 30d</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{repo.forkDelta30d}</p>
+              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Open issues</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{repo.openIssuesCount.toLocaleString()}</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
-              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Touches / 14d</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{repo.userTouch14d}</p>
+              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Notes</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{detail.notes.length}</p>
             </div>
           </div>
         </SectionCard>
@@ -98,11 +131,20 @@ export default async function RepoPage({ params }: RepoPageProps) {
           description="Personal context is the difference between a star and a system."
         >
           <div className="space-y-3">
-            {repo.notes.map((note) => (
-              <div key={note} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4 text-sm text-slate-200/85">
-                {note}
+            {detail.notes.length > 0 ? (
+              detail.notes.map((note) => (
+                <div key={note.id} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4 text-sm text-slate-200/85">
+                  <p>{note.content}</p>
+                  <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                    Updated {note.updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
+                No personal notes yet. The repo detail route is live now, but note editing is still a follow-up slice.
               </div>
-            ))}
+            )}
           </div>
         </SectionCard>
 
@@ -114,19 +156,19 @@ export default async function RepoPage({ params }: RepoPageProps) {
           <div className="grid gap-3 text-sm text-slate-200/85">
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Starred</p>
-              <p className="mt-1">{new Date(repo.starredAt).toLocaleString()}</p>
+              <p className="mt-1">{state.starredAt.toLocaleString()}</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Last pushed</p>
-              <p className="mt-1">{new Date(repo.lastPushedAt).toLocaleString()}</p>
+              <p className="mt-1">{repo.pushedAt ? repo.pushedAt.toLocaleString() : "Unknown"}</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] px-4 py-3">
               <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Latest release</p>
-              <p className="mt-1">{new Date(repo.lastRelease).toLocaleString()}</p>
+              <p className="mt-1">{repo.lastReleaseAt ? repo.lastReleaseAt.toLocaleString() : "Unknown"}</p>
             </div>
             <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] px-4 py-3">
-              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Open issues</p>
-              <p className="mt-1">{repo.openIssues}</p>
+              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Last touched</p>
+              <p className="mt-1">{state.lastTouchedAt ? state.lastTouchedAt.toLocaleString() : "Unknown"}</p>
             </div>
           </div>
         </SectionCard>

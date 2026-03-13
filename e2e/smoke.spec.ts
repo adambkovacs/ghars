@@ -46,4 +46,19 @@ test("signs in and imports a portfolio in test mode", async ({ page }) => {
   await expect(page.getByText(/import complete/i)).toBeVisible();
   await expect(page.getByText(/11 repos synced/i)).toBeVisible();
   await expect(page.getByRole("heading", { name: /apify\/crawlee/i })).toBeVisible();
+
+  await page.getByRole("link", { name: /open command search/i }).click();
+
+  await expect(page).toHaveURL(/\/search$/);
+  await expect(page.getByText(/11 results for e2e-user/i)).toBeVisible();
+
+  await page.getByPlaceholder(/search notes, topics, language, state, or repo name/i).fill("crawlee");
+  await expect(page.getByRole("heading", { name: /apify\/crawlee/i })).toBeVisible();
+  await expect(page.getByText(/repo name/i)).toBeVisible();
+
+  await page.getByRole("heading", { name: /apify\/crawlee/i }).click();
+
+  await expect(page).toHaveURL(/\/repo\/apify\/crawlee$/);
+  await expect(page.getByText(/imported into e2e-user/i)).toBeVisible();
+  await expect(page.getByText(/no personal notes yet/i)).toBeVisible();
 });

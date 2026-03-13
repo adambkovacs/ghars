@@ -11,15 +11,15 @@ This is the short-term execution queue. The canonical longer-horizon status live
    - user lands on `/dashboard`
    - user imports starred repos
    - imported dashboard data renders for that user only
-3. Replace the demo-backed search surface with live user portfolio data
-4. Add Playwright acceptance coverage for post-import search and drill-down
+3. Replace the demo-backed analytics surface with live imported portfolio metrics and snapshots
+4. Replace the demo-backed reports surface with live generated report snapshots
 
 ## Next
 
-1. Replace demo-backed repo detail with live imported data, notes, and state
-2. Replace demo-backed analytics with live imported portfolio metrics and snapshots
-3. Replace demo-backed reports with live generated report snapshots
-4. Extend scheduled refresh integration so momentum and neglect data stay current in live views
+1. Extend repo detail so notes and state changes can be edited from the live UI
+2. Extend scheduled refresh integration so momentum and neglect data stay current in live views
+3. Add dedicated acceptance coverage for analytics and reports once those surfaces are live
+4. Tighten the authenticated app chrome so signed-in users do not see generic sign-in CTAs
 
 ## Later
 

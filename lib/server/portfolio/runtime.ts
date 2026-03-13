@@ -1,6 +1,14 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
-import type { GitHubStarPage, OverviewMetrics, PortfolioEvent, RepoCatalog, UserNote, UserRepoState } from "@/lib/domain/types";
+import type {
+  GitHubStarPage,
+  OverviewMetrics,
+  PortfolioEvent,
+  RepoCatalog,
+  SearchFilters,
+  UserNote,
+  UserRepoState,
+} from "@/lib/domain/types";
 import { demoRepositories, demoStates } from "@/lib/demo/portfolio";
 import { appEnv } from "@/lib/env/app-env";
 import type {
@@ -32,6 +40,38 @@ export type PortfolioDashboardModel = {
   hasImport: boolean;
 };
 
+export type PortfolioSearchSavedView = {
+  id: string;
+  name: string;
+  description: string;
+  count: number;
+  query: string;
+  filters?: SearchFilters;
+};
+
+export type PortfolioSearchChip = {
+  label: string;
+  query: string;
+};
+
+export type PortfolioSearchModel = {
+  hasImport: boolean;
+  githubLogin: string | null;
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  notes: UserNote[];
+  savedViews: PortfolioSearchSavedView[];
+  quickQueries: PortfolioSearchChip[];
+};
+
+export type PortfolioRepoDetailModel = {
+  hasImport: boolean;
+  githubLogin: string | null;
+  repo: RepoCatalog | null;
+  state: UserRepoState | null;
+  notes: UserNote[];
+};
+
 type ImportRequest = {
   userId: string;
   githubUserId: string;
@@ -42,6 +82,8 @@ type ImportRequest = {
 type PortfolioRuntime = {
   importPortfolio(request: ImportRequest): Promise<{ imported: number; completedAt: Date }>;
   getDashboardModel(userId: string): Promise<PortfolioDashboardModel>;
+  getSearchModel(userId: string): Promise<PortfolioSearchModel>;
+  getRepoDetailModel(userId: string, owner: string, name: string): Promise<PortfolioRepoDetailModel>;
 };
 
 class SystemClock implements Clock {
@@ -362,15 +404,48 @@ function getTestRuntime(): PortfolioRuntime {
       return result;
     },
     async getDashboardModel(userId) {
-      const states = await runtime.userRepoStateStore.listByUser(userId);
-      const repos = await runtime.repoCatalogStore.listByIds(states.map((state) => state.repoId));
-      const notes = await runtime.userNoteStore.listByUser(userId);
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
       return buildDashboardModel({
-        repositories: repos,
+        repositories,
         states,
         notes,
         githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
         lastSyncedAt: runtime.connectionByUserId.get(userId)?.lastSyncedAt ?? null,
+      });
+    },
+    async getSearchModel(userId) {
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      return buildSearchModel({
+        repositories,
+        states,
+        notes,
+        githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
+      });
+    },
+    async getRepoDetailModel(userId, owner, name) {
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      return buildRepoDetailModel({
+        owner,
+        name,
+        repositories,
+        states,
+        notes,
+        githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
       });
     },
   };
@@ -410,21 +485,79 @@ function getConvexRuntime(): PortfolioRuntime {
       return result;
     },
     async getDashboardModel(userId) {
-      const states = await userRepoStateStore.listByUser(userId);
-      const repos = await repoCatalogStore.listByIds(states.map((state) => state.repoId));
-      const notes = await userNoteStore.listByUser(userId);
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
       const connection = await client.query(api.portfolio.getGitHubConnection, {
         authUserId: userId,
       });
 
       return buildDashboardModel({
-        repositories: repos,
+        repositories,
         states,
         notes,
         githubLogin: connection?.githubLogin ?? null,
         lastSyncedAt: connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null,
       });
     },
+    async getSearchModel(userId) {
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const connection = await client.query(api.portfolio.getGitHubConnection, {
+        authUserId: userId,
+      });
+
+      return buildSearchModel({
+        repositories,
+        states,
+        notes,
+        githubLogin: connection?.githubLogin ?? null,
+      });
+    },
+    async getRepoDetailModel(userId, owner, name) {
+      const { repositories, states, notes } = await loadPortfolioData({
+        userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const connection = await client.query(api.portfolio.getGitHubConnection, {
+        authUserId: userId,
+      });
+
+      return buildRepoDetailModel({
+        owner,
+        name,
+        repositories,
+        states,
+        notes,
+        githubLogin: connection?.githubLogin ?? null,
+      });
+    },
+  };
+}
+
+async function loadPortfolioData(input: {
+  userId: string;
+  repoCatalogStore: RepoCatalogStore;
+  userRepoStateStore: UserRepoStateStore;
+  userNoteStore: UserNoteStore;
+}) {
+  const states = await input.userRepoStateStore.listByUser(input.userId);
+  const repositories = await input.repoCatalogStore.listByIds(states.map((state) => state.repoId));
+  const notes = await input.userNoteStore.listByUser(input.userId);
+
+  return {
+    repositories,
+    states,
+    notes,
   };
 }
 
@@ -472,6 +605,124 @@ function buildDashboardModel(input: {
     lastSyncedAt: input.lastSyncedAt,
     githubLogin: input.githubLogin,
     hasImport: input.states.length > 0,
+  };
+}
+
+function buildSearchModel(input: {
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  notes: UserNote[];
+  githubLogin: string | null;
+}): PortfolioSearchModel {
+  const statesByName = input.states.map((state) => {
+    const repo = input.repositories.find((entry) => entry.id === state.repoId);
+    return { state, repo };
+  });
+
+  const countByState = {
+    started: input.states.filter((state) => state.state === "started").length,
+    watching: input.states.filter((state) => state.state === "watching").length,
+    parked: input.states.filter((state) => state.state === "parked").length,
+    archived: statesByName.filter(({ repo }) => repo?.archived).length,
+  };
+
+  const topicCounts = new Map<string, number>();
+  const languageCounts = new Map<string, number>();
+  for (const repo of input.repositories) {
+    for (const topic of repo.topics) {
+      topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
+    }
+    if (repo.language) {
+      languageCounts.set(repo.language, (languageCounts.get(repo.language) ?? 0) + 1);
+    }
+  }
+
+  const topTopics = [...topicCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3)
+    .map(([topic]) => ({ label: topic, query: topic }));
+  const topLanguages = [...languageCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 2)
+    .map(([language]) => ({ label: language, query: language }));
+
+  return {
+    hasImport: input.states.length > 0,
+    githubLogin: input.githubLogin,
+    repositories: input.repositories,
+    states: input.states,
+    notes: input.notes,
+    savedViews: [
+      {
+        id: "all",
+        name: "All imported",
+        description: "Everything in the current portfolio",
+        count: input.states.length,
+        query: "",
+      },
+      {
+        id: "started",
+        name: "Started",
+        description: "Repos you moved into active work",
+        count: countByState.started,
+        query: "started",
+        filters: { state: ["started"] },
+      },
+      {
+        id: "watching",
+        name: "Watching",
+        description: "Repos you want to keep warm",
+        count: countByState.watching,
+        query: "watching",
+        filters: { state: ["watching"] },
+      },
+      {
+        id: "parked",
+        name: "Parked",
+        description: "Repos you explicitly set aside",
+        count: countByState.parked,
+        query: "parked",
+        filters: { state: ["parked"] },
+      },
+      {
+        id: "archived",
+        name: "Archived",
+        description: "Imported repos that are archived upstream",
+        count: countByState.archived,
+        query: "",
+        filters: { archived: true },
+      },
+    ],
+    quickQueries: [
+      { label: "started", query: "started" },
+      { label: "watching", query: "watching" },
+      ...topTopics,
+      ...topLanguages,
+    ],
+  };
+}
+
+function buildRepoDetailModel(input: {
+  owner: string;
+  name: string;
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  notes: UserNote[];
+  githubLogin: string | null;
+}): PortfolioRepoDetailModel {
+  const fullName = `${input.owner}/${input.name}`.toLowerCase();
+  const repo = input.repositories.find((entry) => entry.fullName.toLowerCase() === fullName) ?? null;
+  const state = repo
+    ? input.states.find((entry) => entry.repoId === repo.id) ?? null
+    : null;
+  const notes = repo ? input.notes.filter((entry) => entry.repoId === repo.id) : [];
+
+  return {
+    hasImport: input.states.length > 0,
+    githubLogin: input.githubLogin,
+    repo,
+    state,
+    notes,
   };
 }
 

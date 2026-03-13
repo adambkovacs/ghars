@@ -27,7 +27,8 @@ The repo includes:
 - Auth.js GitHub-only auth scaffolding with App Router handlers and protected-route proxy
 - Convex schema and production function scaffolding
 - a real dashboard import slice driven by the signed-in session and the import service
-- demo-backed search, analytics, reports, and repo detail surfaces
+- live imported search and repo detail surfaces
+- demo-backed analytics and reports surfaces
 - pure domain services and tests that are broader than the current UI integration
 - Playwright coverage for signed-out routing plus a test-mode login and import flow
 - live GitHub repo, Vercel project, and Convex deployment infrastructure

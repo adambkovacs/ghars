@@ -9,5 +9,5 @@ Canonical planning and execution status now live under `plan/`.
 ## Scratchpad
 
 - [ ] Enable production GitHub OAuth secrets and verify real login flow
-- [ ] Replace demo-backed search with live user portfolio data
-- [ ] Add acceptance coverage for post-import search and repo drill-down
+- [ ] Replace demo-backed analytics and reports with live portfolio data
+- [ ] Add note and state editing to the live repo detail surface
