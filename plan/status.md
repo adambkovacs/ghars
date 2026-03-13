@@ -17,7 +17,7 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 | Phase | Status | Notes | Proof |
 | --- | --- | --- | --- |
 | 0. Repo and design foundation | done | App shell, routes, tests, docs, and environment scaffolding are in place | [Landing page](../app/page.tsx), [app chrome](../components/layout/app-chrome.tsx), [smoke tests](../e2e/smoke.spec.ts) |
-| 1. Auth and GitHub import | done in code, blocked in production | Auth.js GitHub-only flow and dashboard import slice exist; production OAuth still needs secrets | [Auth config](../auth.ts), [dashboard action](../app/dashboard/actions.ts), [GitHub gateway](../lib/adapters/github/githubApiGateway.ts) |
+| 1. Auth and GitHub import | partial | Production auth secrets are configured and the live sign-in page now exposes GitHub login; a real user-authenticated import still needs live verification | [Auth config](../auth.ts), [dashboard action](../app/dashboard/actions.ts), [GitHub gateway](../lib/adapters/github/githubApiGateway.ts) |
 | 2. Notes, states, and search core | partial | Search now uses imported data, but note editing and state mutation are not yet wired into the live UI | [service tests](../tests/unit/services.test.ts), [search service](../lib/services/searchPortfolio.ts), [search UI](../components/search/search-studio.tsx) |
 | 3. Dashboard alpha and chart system | partial | Dashboard import is live; broader analytics surfaces are still demo-backed | [dashboard page](../app/dashboard/page.tsx), [state ring](../components/charts/state-ring.tsx), [animated value](../components/charts/animated-value.tsx) |
 | 4. Momentum engine and scheduled refresh | partial | Scoring services exist, but live scheduled refresh is not fully integrated into the product UI | [momentum service](../lib/services/computeMomentumScore.ts), [neglect service](../lib/services/generateNeglectSignals.ts), [crons](../convex/crons.ts) |
@@ -29,19 +29,20 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 
 | Surface | Auth gating | Real data integration | Acceptance coverage | Status |
 | --- | --- | --- | --- | --- |
-| Auth, login, import | yes | yes for dashboard import slice | yes in `E2E_TEST_MODE` | partial production blocker |
+| Auth, login, import | yes | yes for dashboard import slice | yes in `E2E_TEST_MODE`; live sign-in page verified | partial |
 | Dashboard | yes | yes for imported metrics and recent repos | yes through login-and-import Playwright flow | partial |
 | Search | yes | yes | yes through post-import search flow | partial |
 | Analytics | yes | no, still demo-backed | no dedicated acceptance flow | partial |
 | Reports | yes | no, still demo-backed | no dedicated acceptance flow | partial |
 | Repo detail | yes | yes | yes through search drill-down flow | partial |
 
-## Production blockers
+## Production auth status
 
-- Missing `AUTH_SECRET`
-- Missing `AUTH_GITHUB_ID`
-- Missing `AUTH_GITHUB_SECRET`
-- Because of those missing secrets, real GitHub OAuth is not yet enabled in production even though the flow is implemented
+- `AUTH_SECRET` is configured in Vercel
+- `AUTH_GITHUB_ID` is configured in Vercel
+- `AUTH_GITHUB_SECRET` is configured in Vercel
+- `ghars.vercel.app/sign-in` now renders the live `Continue with GitHub` flow
+- A full production user-authenticated import still needs manual verification with a real GitHub account
 
 ## Important evidence notes
 

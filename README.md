@@ -55,7 +55,7 @@ Optional during development:
 
 - `bun run test` covers the pure service layer, including route access policy and portfolio services
 - `bun run test:e2e` covers the public landing, protected-route redirects, `/login` aliasing, and a full sign-in plus import flow in `E2E_TEST_MODE`
-- Real GitHub OAuth in production still requires `AUTH_SECRET`, `AUTH_GITHUB_ID`, and `AUTH_GITHUB_SECRET`
+- Real GitHub OAuth is now configured in Vercel production; the remaining step is a full live user-authenticated import verification
 
 ## Product decisions
 

@@ -4,15 +4,15 @@ This is the short-term execution queue. The canonical longer-horizon status live
 
 ## Now
 
-1. Enable real GitHub OAuth in production by setting `AUTH_SECRET`, `AUTH_GITHUB_ID`, and `AUTH_GITHUB_SECRET`
-2. Verify the true webapp flow end to end:
+1. Verify the true production webapp flow end to end:
    - signed-out user lands on `/`
    - user signs in with GitHub
    - user lands on `/dashboard`
    - user imports starred repos
    - imported dashboard data renders for that user only
-3. Replace the demo-backed analytics surface with live imported portfolio metrics and snapshots
-4. Replace the demo-backed reports surface with live generated report snapshots
+2. Replace the demo-backed analytics surface with live imported portfolio metrics and snapshots
+3. Replace the demo-backed reports surface with live generated report snapshots
+4. Deploy those live analytics and reports slices after acceptance coverage lands
 
 ## Next
 

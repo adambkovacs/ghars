@@ -26,6 +26,6 @@ Build `ghars` as a dashboard-first GitHub stars observability product with memor
 - Keep v1 auth GitHub-only through Auth.js. That matches the product better than mixed auth methods because every meaningful user action depends on GitHub data.
 - GitHub login and GitHub authorization remain the same flow in v1. There is no separate GitHub-app authorization step.
 - Extend live portfolio data to analytics and reports, then deepen note and state editing on repo detail
-- Add real GitHub OAuth credentials in production so the existing import slice can run against the actual GitHub API
+- Production GitHub OAuth credentials are configured; the remaining auth step is verifying a full live user login and import
 - Tune scoring and cluster narratives with real data
 - Treat `/plan` as the canonical planning location going forward
