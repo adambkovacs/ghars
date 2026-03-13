@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "dev:demo": "GHARS_DEMO_MODE=true next dev --webpack",
-    "build": "next build --webpack",
+    "build": "convex codegen && next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
