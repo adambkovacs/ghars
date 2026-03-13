@@ -22,17 +22,18 @@ export function generateReport(input: {
   const topMover = input.momentum[0];
   const topMoverName = topMover ? repoById.get(topMover.repoId)?.fullName ?? topMover.repoId : "none";
   const hottestCluster = input.clusters[0];
+  const readmeReadyCount = input.repositories.filter((repo) => repo.readmeSummary || repo.readmeExcerpt).length;
 
   return {
     id: input.id,
     period: input.period,
     generatedAt: input.generatedAt,
-    summary: `${input.metrics.totalStars} tracked repos, ${input.metrics.startedCount} started, ${input.neglectSignals.length} neglected. Top mover: ${topMoverName}.`,
+    summary: `${input.metrics.totalStars} tracked repos, ${input.metrics.startedCount} started, ${input.neglectSignals.length} neglected, ${readmeReadyCount} README-enriched. Top mover: ${topMoverName}.`,
     sections: [
       {
         id: `${input.id}-overview`,
         title: "Portfolio Overview",
-        summary: `${input.metrics.annotatedCount} notes and ${input.metrics.watchingCount} active watch slots keep the portfolio warm.`,
+        summary: `${input.metrics.annotatedCount} notes, ${input.metrics.watchingCount} active watch slots, and ${readmeReadyCount} enriched READMEs keep the portfolio legible.`,
         evidenceRepoIds: [],
       },
       {

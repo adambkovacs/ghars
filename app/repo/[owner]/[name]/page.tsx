@@ -176,6 +176,44 @@ export default async function RepoPage({ params }: RepoPageProps) {
         </SectionCard>
 
         <SectionCard
+          eyebrow="README"
+          title="Upstream context"
+          description="The README is where the real intent usually lives. ghars pulls it in so your portfolio has more than metadata."
+        >
+          <div className="space-y-4">
+            {repo.readmeSummary ? (
+              <div className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.2em] text-cyan-100/70">Summary</p>
+                <p className="mt-3 text-sm text-slate-200/85">{repo.readmeSummary}</p>
+                <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                  {repo.readmeFetchedAt
+                    ? `Fetched ${repo.readmeFetchedAt.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}`
+                    : "README fetched during import"}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
+                README enrichment is still pending for this repo.
+              </div>
+            )}
+
+            {detail.readme?.content ? (
+              <div className="rounded-[1.5rem] border border-white/8 bg-slate-950/40 p-4">
+                <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Excerpt</p>
+                <pre className="mt-3 max-h-[22rem] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-200/82">
+                  {detail.readme.content.slice(0, 2400)}
+                  {detail.readme.content.length > 2400 ? "\n\n..." : ""}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <SectionCard
           eyebrow="Metadata"
           title="Raw facts"
           description="Structured evidence beside the human layer."

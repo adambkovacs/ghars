@@ -8,6 +8,7 @@ import type {
   OverviewMetrics,
   PortfolioEvent,
   RepoCatalog,
+  RepoReadme,
   RepoSnapshotDaily,
   RepoState,
   ReportPeriod,
@@ -20,8 +21,10 @@ import { demoRepositories, demoSnapshots, demoStates } from "@/lib/demo/portfoli
 import { appEnv } from "@/lib/env/app-env";
 import type {
   Clock,
+  GitHubGateway,
   PortfolioEventStore,
   RepoCatalogStore,
+  RepoReadmeStore,
   ReportSnapshotStore,
   SnapshotStore,
   UserNoteStore,
@@ -34,6 +37,7 @@ import {
   createAddUserNoteService,
   createChangeRepoStateService,
   createImportStarredReposService,
+  generateNeglectSignals,
 } from "@/lib/services";
 import { GitHubApiGateway } from "@/lib/adapters/github/githubApiGateway";
 import {
@@ -42,6 +46,10 @@ import {
   buildSnapshotMap,
   deriveUserTouchCount14d,
 } from "@/lib/server/portfolio/artifacts";
+import {
+  buildReadmeEnrichment,
+  selectReadmeCandidates,
+} from "@/lib/server/portfolio/readme";
 
 const TEST_RUNTIME_STATE_DIR = path.join(os.tmpdir(), "ghars-e2e-runtime");
 
@@ -94,6 +102,7 @@ export type PortfolioRepoDetailModel = {
   repo: RepoCatalog | null;
   state: UserRepoState | null;
   notes: UserNote[];
+  readme: RepoReadme | null;
   starHistory: { capturedAt: Date; stars: number; momentumScore: number | null }[];
 };
 
@@ -123,6 +132,46 @@ export type PortfolioAnalyticsRepo = {
   forkDelta30d: number;
   trend: number[];
   reasons: string[];
+  readmeSummary?: string | null;
+  readmeFetchedAt?: Date | null;
+};
+
+export type PortfolioCoverageMetric = {
+  id: string;
+  label: string;
+  count: number;
+  total: number;
+  percentage: number;
+  summary: string;
+};
+
+export type PortfolioAnalyticsOpportunity = {
+  fullName: string;
+  state: UserRepoState["state"];
+  language?: string | null;
+  momentumScore: number;
+  noteCount: number;
+  starDelta7d: number;
+  lastTouchedAt: Date | null;
+  readmeSummary?: string | null;
+  reasons: string[];
+};
+
+export type PortfolioAnalyticsNeglect = {
+  fullName: string;
+  state: UserRepoState["state"];
+  noteCount: number;
+  neglectScore: number;
+  lastTouchedAt: Date | null;
+  reasons: string[];
+};
+
+export type PortfolioAnalyticsActivity = {
+  id: string;
+  repoFullName: string;
+  type: PortfolioEvent["type"];
+  occurredAt: Date;
+  summary: string;
 };
 
 export type PortfolioAnalyticsModel = {
@@ -133,6 +182,10 @@ export type PortfolioAnalyticsModel = {
   clusters: PortfolioAnalyticsCluster[];
   constellationItems: { cluster: string; importance: number; momentum: number }[];
   topRepos: PortfolioAnalyticsRepo[];
+  coverage: PortfolioCoverageMetric[];
+  opportunities: PortfolioAnalyticsOpportunity[];
+  neglectQueue: PortfolioAnalyticsNeglect[];
+  recentActivity: PortfolioAnalyticsActivity[];
 };
 
 export type PortfolioRenderedReport = {
@@ -206,6 +259,20 @@ class InMemoryRepoCatalogStore implements RepoCatalogStore {
       const repo = this.records.get(repoId);
       return repo ? [repo] : [];
     });
+  }
+}
+
+class InMemoryRepoReadmeStore implements RepoReadmeStore {
+  constructor(private readonly records = new Map<string, RepoReadme>()) {}
+
+  async get(repoId: string) {
+    return this.records.get(repoId) ?? null;
+  }
+
+  async upsertMany(readmes: RepoReadme[]) {
+    for (const readme of readmes) {
+      this.records.set(readme.repoId, readme);
+    }
   }
 }
 
@@ -339,6 +406,9 @@ class ConvexRepoCatalogStore implements RepoCatalogStore {
         archived: repo.archived,
         pushedAt: repo.pushedAt?.getTime() ?? undefined,
         latestReleaseAt: repo.lastReleaseAt?.getTime() ?? undefined,
+        readmeSummary: repo.readmeSummary ?? undefined,
+        readmeExcerpt: repo.readmeExcerpt ?? undefined,
+        readmeFetchedAt: repo.readmeFetchedAt?.getTime() ?? undefined,
         createdAt: repo.createdAt?.getTime() ?? undefined,
         updatedAt: repo.updatedAt?.getTime() ?? Date.now(),
       })),
@@ -371,9 +441,46 @@ class ConvexRepoCatalogStore implements RepoCatalogStore {
       archived: repo.archived,
       isFork: false,
       lastReleaseAt: repo.latestReleaseAt ? new Date(repo.latestReleaseAt) : null,
+      readmeSummary: repo.readmeSummary ?? null,
+      readmeExcerpt: repo.readmeExcerpt ?? null,
+      readmeFetchedAt: repo.readmeFetchedAt ? new Date(repo.readmeFetchedAt) : null,
       createdAt: repo.createdAt ? new Date(repo.createdAt) : null,
       updatedAt: repo.updatedAt ? new Date(repo.updatedAt) : null,
     }));
+  }
+}
+
+class ConvexRepoReadmeStore implements RepoReadmeStore {
+  constructor(private readonly client: ConvexHttpClient) {}
+
+  async get(repoId: string) {
+    const readme = await this.client.query(api.portfolio.getRepoReadmeByFullName, {
+      repoFullName: repoId,
+    });
+
+    if (!readme) {
+      return null;
+    }
+
+    return {
+      repoId: repoId.toLowerCase(),
+      content: readme.content,
+      fetchedAt: new Date(readme.fetchedAt),
+    };
+  }
+
+  async upsertMany(readmes: RepoReadme[]) {
+    if (readmes.length === 0) {
+      return;
+    }
+
+    await this.client.mutation(api.portfolio.upsertRepoReadmes, {
+      readmes: readmes.map((readme) => ({
+        repoFullName: readme.repoId,
+        content: readme.content,
+        fetchedAt: readme.fetchedAt.getTime(),
+      })),
+    });
   }
 }
 
@@ -628,6 +735,79 @@ async function persistDerivedArtifacts(input: {
   }
 }
 
+async function hydrateRepoReadmes(input: {
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  repoCatalogStore: RepoCatalogStore;
+  repoReadmeStore: RepoReadmeStore;
+  github: GitHubGateway;
+  limit: number;
+}) {
+  const candidates = selectReadmeCandidates({
+    repositories: input.repositories,
+    states: input.states,
+    limit: input.limit,
+  });
+
+  if (candidates.length === 0) {
+    return input.repositories;
+  }
+
+  const hydratedReadmes: RepoReadme[] = [];
+  const enrichedRepos: RepoCatalog[] = [];
+
+  for (const repo of candidates) {
+    try {
+      const readme = await input.github.getReadme(repo.fullName);
+      if (!readme) {
+        continue;
+      }
+
+      hydratedReadmes.push(readme);
+      enrichedRepos.push(buildReadmeEnrichment(repo, readme));
+    } catch (error) {
+      console.error(`Failed to hydrate README for ${repo.fullName}`, error);
+    }
+  }
+
+  if (hydratedReadmes.length === 0) {
+    return input.repositories;
+  }
+
+  await input.repoReadmeStore.upsertMany(hydratedReadmes);
+  await input.repoCatalogStore.upsertMany(enrichedRepos);
+
+  const enrichedById = new Map(enrichedRepos.map((repo) => [repo.id, repo]));
+  return input.repositories.map((repo) => enrichedById.get(repo.id) ?? repo);
+}
+
+async function hydrateRepoReadmeOnDemand(input: {
+  repo: RepoCatalog | null;
+  accessToken: string | null;
+  repoCatalogStore: RepoCatalogStore;
+  repoReadmeStore: RepoReadmeStore;
+}) {
+  if (!input.repo || input.repo.readmeFetchedAt || !input.accessToken) {
+    return input.repo;
+  }
+
+  try {
+    const github = new GitHubApiGateway(input.accessToken);
+    const readme = await github.getReadme(input.repo.fullName);
+    if (!readme) {
+      return input.repo;
+    }
+
+    const enrichedRepo = buildReadmeEnrichment(input.repo, readme);
+    await input.repoReadmeStore.upsertMany([readme]);
+    await input.repoCatalogStore.upsertMany([enrichedRepo]);
+    return enrichedRepo;
+  } catch (error) {
+    console.error(`Failed to hydrate README on demand for ${input.repo.fullName}`, error);
+    return input.repo;
+  }
+}
+
 function getTestRuntimeStatePath(userId: string) {
   return path.join(TEST_RUNTIME_STATE_DIR, `${userId}.json`);
 }
@@ -635,6 +815,7 @@ function getTestRuntimeStatePath(userId: string) {
 async function hydrateTestRuntimeState(
   runtime: {
     repoCatalogStore: InMemoryRepoCatalogStore;
+    repoReadmeStore: InMemoryRepoReadmeStore;
     userRepoStateStore: InMemoryUserRepoStateStore;
     userNoteStore: InMemoryUserNoteStore;
     eventStore: InMemoryPortfolioEventStore;
@@ -658,6 +839,7 @@ async function hydrateTestRuntimeState(
       events: Array<Omit<PortfolioEvent, "occurredAt"> & { occurredAt: string }>;
       snapshots: Array<Omit<RepoSnapshotDaily, "snapshotDate" | "pushedAt" | "lastReleaseAt"> & { snapshotDate: string; pushedAt?: string | null; lastReleaseAt?: string | null }>;
       reports: Array<Omit<ReportSnapshot, "generatedAt"> & { generatedAt: string }>;
+      readmes?: Array<{ repoId: string; content: string; fetchedAt: string }>;
     };
 
     await runtime.repoCatalogStore.upsertMany(persisted.repositories);
@@ -696,6 +878,13 @@ async function hydrateTestRuntimeState(
         generatedAt: new Date(report.generatedAt),
       });
     }
+    await runtime.repoReadmeStore.upsertMany(
+      (persisted.readmes ?? []).map((readme) => ({
+        repoId: readme.repoId,
+        content: readme.content,
+        fetchedAt: new Date(readme.fetchedAt),
+      }))
+    );
 
     if (persisted.connection) {
       runtime.connectionByUserId.set(userId, {
@@ -713,6 +902,7 @@ async function hydrateTestRuntimeState(
 async function persistTestRuntimeState(
   runtime: {
     repoCatalogStore: InMemoryRepoCatalogStore;
+    repoReadmeStore: InMemoryRepoReadmeStore;
     userRepoStateStore: InMemoryUserRepoStateStore;
     userNoteStore: InMemoryUserNoteStore;
     eventStore: InMemoryPortfolioEventStore;
@@ -730,7 +920,11 @@ async function persistTestRuntimeState(
   const events = await runtime.eventStore.listByUser(userId);
   const snapshots = await runtime.snapshotStore.listLatest(states.map((state) => state.repoId));
   const reports = await runtime.reportStore.listByUser(userId);
+  const readmes = repositories
+    .map((repo) => repo.id)
+    .map((repoId) => runtime.repoReadmeStore.get(repoId));
   const connection = runtime.connectionByUserId.get(userId);
+  const resolvedReadmes = await Promise.all(readmes);
 
   await fs.writeFile(
     getTestRuntimeStatePath(userId),
@@ -768,6 +962,13 @@ async function persistTestRuntimeState(
           ...report,
           generatedAt: report.generatedAt.toISOString(),
         })),
+        readmes: resolvedReadmes
+          .filter((readme): readme is RepoReadme => Boolean(readme))
+          .map((readme) => ({
+            repoId: readme.repoId,
+            content: readme.content,
+            fetchedAt: readme.fetchedAt.toISOString(),
+          })),
       },
       null,
       2
@@ -780,6 +981,7 @@ function getTestRuntime(): PortfolioRuntime {
   const globalScope = globalThis as typeof globalThis & {
     __gharsTestRuntime?: {
       repoCatalogStore: InMemoryRepoCatalogStore;
+      repoReadmeStore: InMemoryRepoReadmeStore;
       userRepoStateStore: InMemoryUserRepoStateStore;
       userNoteStore: InMemoryUserNoteStore;
       eventStore: InMemoryPortfolioEventStore;
@@ -793,6 +995,7 @@ function getTestRuntime(): PortfolioRuntime {
     globalScope.__gharsTestRuntime ??
     {
       repoCatalogStore: new InMemoryRepoCatalogStore(),
+      repoReadmeStore: new InMemoryRepoReadmeStore(),
       userRepoStateStore: new InMemoryUserRepoStateStore(),
       userNoteStore: new InMemoryUserNoteStore(),
       eventStore: new InMemoryPortfolioEventStore(),
@@ -807,29 +1010,37 @@ function getTestRuntime(): PortfolioRuntime {
     async importPortfolio(request) {
       await hydrateTestRuntimeState(runtime, request.userId);
       const stateByRepoId = new Map(demoStates.map((state) => [state.repoId, state.starredAt]));
-      const service = createImportStarredReposService({
-        github: {
-          async listStarred() {
-            return {
-              edges: demoRepositories.map((repo) => ({
-                repo,
-                starredAt: stateByRepoId.get(repo.id) ?? new Date("2026-03-01T00:00:00.000Z"),
-              })),
-              nextCursor: null,
-            };
-          },
-          async getRepo(fullName) {
-            const repo = demoRepositories.find((entry) => entry.fullName === fullName);
-            if (!repo) {
-              throw new Error(`Missing fake repo: ${fullName}`);
-            }
-            return repo;
-          },
-          async getLatestRelease(fullName) {
-            const repo = demoRepositories.find((entry) => entry.fullName === fullName);
-            return repo?.lastReleaseAt ?? null;
-          },
+      const github = {
+        async listStarred() {
+          return {
+            edges: demoRepositories.map((repo) => ({
+              repo,
+              starredAt: stateByRepoId.get(repo.id) ?? new Date("2026-03-01T00:00:00.000Z"),
+            })),
+            nextCursor: null,
+          };
         },
+        async getRepo(fullName: string) {
+          const repo = demoRepositories.find((entry) => entry.fullName === fullName);
+          if (!repo) {
+            throw new Error(`Missing fake repo: ${fullName}`);
+          }
+          return repo;
+        },
+        async getLatestRelease(fullName: string) {
+          const repo = demoRepositories.find((entry) => entry.fullName === fullName);
+          return repo?.lastReleaseAt ?? null;
+        },
+        async getReadme(fullName: string) {
+          return {
+            repoId: fullName.toLowerCase(),
+            content: `# ${fullName}\n\nThis README explains how ${fullName} fits into a portfolio observability workflow and when to use it.`,
+            fetchedAt: new Date("2026-03-11T00:00:00.000Z"),
+          };
+        },
+      } satisfies GitHubGateway;
+      const service = createImportStarredReposService({
+        github,
         repoCatalogStore: runtime.repoCatalogStore,
         userRepoStateStore: runtime.userRepoStateStore,
         eventStore: runtime.eventStore,
@@ -841,12 +1052,23 @@ function getTestRuntime(): PortfolioRuntime {
         githubLogin: request.githubLogin,
         lastSyncedAt: result.completedAt,
       });
-      const portfolio = await loadPortfolioData({
+      let portfolio = await loadPortfolioData({
         userId: request.userId,
         repoCatalogStore: runtime.repoCatalogStore,
         userRepoStateStore: runtime.userRepoStateStore,
         userNoteStore: runtime.userNoteStore,
       });
+      portfolio = {
+        ...portfolio,
+        repositories: await hydrateRepoReadmes({
+          repositories: portfolio.repositories,
+          states: portfolio.states,
+          repoCatalogStore: runtime.repoCatalogStore,
+          repoReadmeStore: runtime.repoReadmeStore,
+          github,
+          limit: 8,
+        }),
+      };
       await persistDerivedArtifacts({
         userId: request.userId,
         githubLogin: request.githubLogin,
@@ -996,6 +1218,7 @@ function getTestRuntime(): PortfolioRuntime {
         states,
         notes,
         snapshots,
+        readmeStore: runtime.repoReadmeStore,
         githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
       });
     },
@@ -1045,6 +1268,7 @@ function getConvexRuntime(): PortfolioRuntime {
 
   const client = new ConvexHttpClient(appEnv.NEXT_PUBLIC_CONVEX_URL);
   const repoCatalogStore = new ConvexRepoCatalogStore(client);
+  const repoReadmeStore = new ConvexRepoReadmeStore(client);
   const userRepoStateStore = new ConvexUserRepoStateStore(client);
   const userNoteStore = new ConvexUserNoteStore(client);
   const eventStore = new ConvexPortfolioEventStore(client);
@@ -1058,10 +1282,17 @@ function getConvexRuntime(): PortfolioRuntime {
     });
   }
 
+  async function loadConnectionWithAccessToken(userId: string) {
+    return await client.query(api.portfolio.getGitHubConnectionWithAccessToken, {
+      authUserId: userId,
+    });
+  }
+
   return {
     async importPortfolio(request) {
+      const github = new GitHubApiGateway(request.accessToken);
       const service = createImportStarredReposService({
-        github: new GitHubApiGateway(request.accessToken),
+        github,
         repoCatalogStore,
         userRepoStateStore,
         eventStore,
@@ -1077,12 +1308,23 @@ function getConvexRuntime(): PortfolioRuntime {
         scopes: [],
         lastSyncedAt: result.completedAt.getTime(),
       });
-      const portfolio = await loadPortfolioData({
+      let portfolio = await loadPortfolioData({
         userId: request.userId,
         repoCatalogStore,
         userRepoStateStore,
         userNoteStore,
       });
+      portfolio = {
+        ...portfolio,
+        repositories: await hydrateRepoReadmes({
+          repositories: portfolio.repositories,
+          states: portfolio.states,
+          repoCatalogStore,
+          repoReadmeStore,
+          github,
+          limit: 16,
+        }),
+      };
       await persistDerivedArtifacts({
         userId: request.userId,
         githubLogin: request.githubLogin,
@@ -1219,15 +1461,29 @@ function getConvexRuntime(): PortfolioRuntime {
         userNoteStore,
       });
       const connection = await loadConnection(userId);
+      const connectionWithAccessToken = await loadConnectionWithAccessToken(userId);
       const snapshots = await snapshotStore.listLatest(states.map((state) => state.repoId));
+      const enrichedRepo = await hydrateRepoReadmeOnDemand({
+        repo:
+          repositories.find(
+            (candidate) => candidate.fullName.toLowerCase() === `${owner}/${name}`.toLowerCase()
+          ) ?? null,
+        accessToken: connectionWithAccessToken?.accessToken ?? null,
+        repoCatalogStore,
+        repoReadmeStore,
+      });
+      const nextRepositories = enrichedRepo
+        ? repositories.map((repo) => (repo.id === enrichedRepo.id ? enrichedRepo : repo))
+        : repositories;
 
       return buildRepoDetailModel({
         owner,
         name,
-        repositories,
+        repositories: nextRepositories,
         states,
         notes,
         snapshots,
+        readmeStore: repoReadmeStore,
         githubLogin: connection?.githubLogin ?? null,
       });
     },
@@ -1430,21 +1686,23 @@ function buildSearchModel(input: {
   };
 }
 
-function buildRepoDetailModel(input: {
+async function buildRepoDetailModel(input: {
   owner: string;
   name: string;
   repositories: RepoCatalog[];
   states: UserRepoState[];
   notes: UserNote[];
   snapshots: RepoSnapshotDaily[];
+  readmeStore: RepoReadmeStore;
   githubLogin: string | null;
-}): PortfolioRepoDetailModel {
+}): Promise<PortfolioRepoDetailModel> {
   const fullName = `${input.owner}/${input.name}`.toLowerCase();
   const repo = input.repositories.find((entry) => entry.fullName.toLowerCase() === fullName) ?? null;
   const state = repo
     ? input.states.find((entry) => entry.repoId === repo.id) ?? null
     : null;
   const notes = repo ? input.notes.filter((entry) => entry.repoId === repo.id) : [];
+  const readme = repo ? await input.readmeStore.get(repo.id) : null;
   const starHistory = repo
     ? input.snapshots
         .filter((snapshot) => snapshot.repoId === repo.id)
@@ -1463,6 +1721,7 @@ function buildRepoDetailModel(input: {
     repo,
     state,
     notes,
+    readme,
     starHistory,
   };
 }
@@ -1488,6 +1747,7 @@ function buildAnalyticsModelSync(input: {
   });
   const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
   const noteCountByRepoId = new Map<string, number>();
+  const stateByRepoId = new Map(input.states.map((state) => [state.repoId, state]));
 
   for (const note of input.notes) {
     noteCountByRepoId.set(note.repoId, (noteCountByRepoId.get(note.repoId) ?? 0) + 1);
@@ -1538,7 +1798,7 @@ function buildAnalyticsModelSync(input: {
 
   const topRepos = momentum.slice(0, 8).flatMap((entry) => {
     const repo = repoById.get(entry.repoId);
-    const state = input.states.find((candidate) => candidate.repoId === entry.repoId);
+    const state = stateByRepoId.get(entry.repoId);
     if (!repo || !state) {
       return [];
     }
@@ -1566,8 +1826,17 @@ function buildAnalyticsModelSync(input: {
               : []
           ),
         reasons: buildMomentumReasons(entry),
+        readmeSummary: repo.readmeSummary ?? null,
+        readmeFetchedAt: repo.readmeFetchedAt ?? null,
       } satisfies PortfolioAnalyticsRepo,
     ];
+  });
+
+  const neglectSignals = generateNeglectSignals({
+    now,
+    states: input.states,
+    notes: input.notes,
+    events: input.events,
   });
 
   return {
@@ -1585,6 +1854,27 @@ function buildAnalyticsModelSync(input: {
       momentum: repo.momentumScore,
     })),
     topRepos,
+    coverage: buildCoverageMetrics({
+      repositories: input.repositories,
+      states: input.states,
+      notes: input.notes,
+      snapshots: input.snapshots,
+    }),
+    opportunities: buildOpportunityQueue({
+      topRepos,
+      repositories: input.repositories,
+      states: input.states,
+    }),
+    neglectQueue: buildNeglectQueue({
+      neglectSignals,
+      repositories: input.repositories,
+      states: input.states,
+      noteCountByRepoId,
+    }),
+    recentActivity: buildRecentActivity({
+      events: input.events,
+      repositories: input.repositories,
+    }),
   };
 }
 
@@ -1597,6 +1887,157 @@ async function buildAnalyticsModel(input: {
   githubLogin: string | null;
 }): Promise<PortfolioAnalyticsModel> {
   return buildAnalyticsModelSync(input);
+}
+
+function buildCoverageMetrics(input: {
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  notes: UserNote[];
+  snapshots: RepoSnapshotDaily[];
+}): PortfolioCoverageMetric[] {
+  const total = Math.max(1, input.states.length);
+  const noted = input.states.filter((state) => state.noteCount > 0).length;
+  const curated = input.states.filter((state) => state.state !== "saved" || state.noteCount > 0).length;
+  const readmeReady = input.repositories.filter((repo) => repo.readmeSummary || repo.readmeExcerpt).length;
+  const snapshotted = new Set(input.snapshots.map((snapshot) => snapshot.repoId)).size;
+
+  return [
+    {
+      id: "notes",
+      label: "Notes coverage",
+      count: noted,
+      total,
+      percentage: Math.round((noted / total) * 100),
+      summary: "Repos with at least one personal note.",
+    },
+    {
+      id: "curation",
+      label: "Curated portfolio",
+      count: curated,
+      total,
+      percentage: Math.round((curated / total) * 100),
+      summary: "Repos you moved beyond a passive saved state.",
+    },
+    {
+      id: "readmes",
+      label: "README ready",
+      count: readmeReady,
+      total,
+      percentage: Math.round((readmeReady / total) * 100),
+      summary: "Repos enriched with upstream README context.",
+    },
+    {
+      id: "snapshots",
+      label: "Snapshot history",
+      count: snapshotted,
+      total,
+      percentage: Math.round((snapshotted / total) * 100),
+      summary: "Repos with at least one tracked refresh snapshot.",
+    },
+  ];
+}
+
+function buildOpportunityQueue(input: {
+  topRepos: PortfolioAnalyticsRepo[];
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+}): PortfolioAnalyticsOpportunity[] {
+  const repoByName = new Map(input.repositories.map((repo) => [repo.fullName, repo]));
+  const stateByRepoId = new Map(input.states.map((state) => [state.repoId, state]));
+
+  return input.topRepos
+    .filter((repo) => repo.state === "saved" && repo.noteCount === 0)
+    .map((repo) => ({
+      fullName: repo.fullName,
+      state: repo.state,
+      language: repo.language,
+      momentumScore: repo.momentumScore,
+      noteCount: repo.noteCount,
+      starDelta7d: repo.starDelta7d,
+      lastTouchedAt: stateByRepoId.get(repoByName.get(repo.fullName)?.id ?? "")?.lastTouchedAt ?? null,
+      readmeSummary: repo.readmeSummary ?? null,
+      reasons: [
+        ...repo.reasons,
+        repo.readmeSummary ? "readme ready" : "readme pending",
+        "no personal note yet",
+      ],
+    }))
+    .slice(0, 6);
+}
+
+function buildNeglectQueue(input: {
+  neglectSignals: ReturnType<typeof generateNeglectSignals>;
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  noteCountByRepoId: Map<string, number>;
+}): PortfolioAnalyticsNeglect[] {
+  const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
+  const stateByRepoId = new Map(input.states.map((state) => [state.repoId, state]));
+
+  return input.neglectSignals.slice(0, 6).flatMap((signal) => {
+    const repo = repoById.get(signal.repoId);
+    const state = stateByRepoId.get(signal.repoId);
+    if (!repo || !state) {
+      return [];
+    }
+
+    return [
+      {
+        fullName: repo.fullName,
+        state: state.state,
+        noteCount: input.noteCountByRepoId.get(repo.id) ?? 0,
+        neglectScore: signal.score,
+        lastTouchedAt: state.lastTouchedAt ?? null,
+        reasons: signal.reasons,
+      } satisfies PortfolioAnalyticsNeglect,
+    ];
+  });
+}
+
+function buildRecentActivity(input: {
+  events: PortfolioEvent[];
+  repositories: RepoCatalog[];
+}): PortfolioAnalyticsActivity[] {
+  const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
+
+  return [...input.events]
+    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+    .slice(0, 8)
+    .flatMap((event) => {
+      const repo = repoById.get(event.repoId);
+      if (!repo) {
+        return [];
+      }
+
+      return [
+        {
+          id: event.id,
+          repoFullName: repo.fullName,
+          type: event.type,
+          occurredAt: event.occurredAt,
+          summary: describePortfolioEvent(event.type),
+        } satisfies PortfolioAnalyticsActivity,
+      ];
+    });
+}
+
+function describePortfolioEvent(type: PortfolioEvent["type"]) {
+  switch (type) {
+    case "note_added":
+      return "A note captured fresh context.";
+    case "state_changed":
+      return "State changed, signaling an intent shift.";
+    case "repo_refreshed":
+      return "Upstream metrics were refreshed.";
+    case "start_session_started":
+      return "You actively started working with it.";
+    case "start_session_ended":
+      return "A work session ended.";
+    case "repo_starred":
+      return "The repo entered your portfolio.";
+    default:
+      return "Portfolio activity recorded.";
+  }
 }
 
 function buildReportsModel(input: {

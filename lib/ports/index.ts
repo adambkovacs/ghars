@@ -2,6 +2,7 @@ import type {
   GitHubStarPage,
   PortfolioEvent,
   RepoCatalog,
+  RepoReadme,
   RepoSnapshotDaily,
   ReportSnapshot,
   SearchResult,
@@ -17,6 +18,7 @@ export interface GitHubGateway {
   listStarred(cursor?: string | null): Promise<GitHubStarPage>;
   getRepo(fullName: string): Promise<RepoCatalog>;
   getLatestRelease(fullName: string): Promise<Date | null>;
+  getReadme(fullName: string): Promise<RepoReadme | null>;
 }
 
 export interface AiGateway {
@@ -27,6 +29,11 @@ export interface AiGateway {
 export interface RepoCatalogStore {
   upsertMany(repos: RepoCatalog[]): Promise<void>;
   listByIds(repoIds: string[]): Promise<RepoCatalog[]>;
+}
+
+export interface RepoReadmeStore {
+  get(repoId: string): Promise<RepoReadme | null>;
+  upsertMany(readmes: RepoReadme[]): Promise<void>;
 }
 
 export interface UserRepoStateStore {

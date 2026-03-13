@@ -43,6 +43,9 @@ function buildRepo(overrides: Partial<RepoCatalog> = {}): RepoCatalog {
     archived: overrides.archived ?? false,
     isFork: overrides.isFork ?? false,
     lastReleaseAt: overrides.lastReleaseAt ?? new Date("2026-03-05T00:00:00.000Z"),
+    readmeSummary: overrides.readmeSummary ?? null,
+    readmeExcerpt: overrides.readmeExcerpt ?? null,
+    readmeFetchedAt: overrides.readmeFetchedAt ?? null,
     createdAt: overrides.createdAt ?? new Date("2020-01-01T00:00:00.000Z"),
     updatedAt: overrides.updatedAt ?? new Date("2026-03-11T00:00:00.000Z"),
   };
@@ -147,9 +150,12 @@ describe("portfolio services", () => {
   });
 
   it("searches portfolio by repo metadata, notes, and tags", () => {
-    const repo = buildRepo();
+    const repo = buildRepo({
+      readmeSummary: "README explains refresh orchestration and scheduled sync jobs.",
+      readmeExcerpt: "Use refresh orchestration ideas to keep portfolio snapshots current.",
+    });
     const results = searchPortfolio({
-      query: "refresh",
+      query: "scheduled sync",
       repositories: [repo],
       userStates: [buildState({ tags: ["refresh-jobs"] })],
       notes: [
@@ -165,8 +171,7 @@ describe("portfolio services", () => {
     });
 
     expect(results).toHaveLength(1);
-    expect(results[0]?.reasons).toContain("note");
-    expect(results[0]?.reasons).toContain("tag");
+    expect(results[0]?.reasons).toContain("readme summary");
   });
 
   it("builds overview metrics and temporal drift", () => {
@@ -270,13 +275,17 @@ describe("portfolio services", () => {
 
   it("builds cluster narratives, constellation layout, and reports", async () => {
     const repos = [
-      buildRepo(),
+      buildRepo({
+        readmeSummary: "Automation runtime with browser orchestration.",
+        readmeExcerpt: "README for automation runtime.",
+      }),
       buildRepo({
         id: "repo-2",
         fullName: "openai/openai-node",
         owner: "openai",
         name: "openai-node",
         topics: ["ai", "sdk"],
+        readmeSummary: "Official Node SDK README.",
       }),
     ];
     const clusters: RepoCluster[] = [
@@ -328,5 +337,6 @@ describe("portfolio services", () => {
     expect(layout.nodes).toHaveLength(2);
     expect(report.sections).toHaveLength(4);
     expect(report.summary).toContain("Top mover");
+    expect(report.summary).toContain("README-enriched");
   });
 });

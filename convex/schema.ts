@@ -49,6 +49,9 @@ export default defineSchema({
     latestReleaseAt: v.optional(v.number()),
     summary: v.optional(v.string()),
     embeddingId: v.optional(v.string()),
+    readmeSummary: v.optional(v.string()),
+    readmeExcerpt: v.optional(v.string()),
+    readmeFetchedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -57,6 +60,13 @@ export default defineSchema({
       searchField: "fullName",
       filterFields: ["archived", "primaryLanguage"],
     }),
+
+  repoReadmes: defineTable({
+    repoId: v.id("repoCatalog"),
+    content: v.string(),
+    fetchedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_repoId", ["repoId"]),
 
   userRepoStates: defineTable({
     authUserId: v.string(),

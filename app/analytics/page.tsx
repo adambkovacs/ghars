@@ -125,6 +125,133 @@ export default async function AnalyticsPage() {
               ))}
             </div>
           </SectionCard>
+
+          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <SectionCard
+              eyebrow="Coverage"
+              title="Portfolio coverage"
+              description="This is the truth layer: how much of the portfolio is actually curated, annotated, and README-enriched."
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                {analytics.coverage.map((metric) => (
+                  <div key={metric.id} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">{metric.label}</p>
+                        <p className="mt-2 text-3xl font-semibold text-white">{metric.percentage}%</p>
+                      </div>
+                      <p className="text-sm text-slate-300/78">
+                        {metric.count}/{metric.total}
+                      </p>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-300/78">{metric.summary}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              eyebrow="Activity"
+              title="Recent portfolio activity"
+              description="Recent touches, refreshes, and state changes. This is the living audit log behind the dashboard."
+            >
+              <div className="space-y-3">
+                {analytics.recentActivity.length > 0 ? (
+                  analytics.recentActivity.map((event) => (
+                    <article key={event.id} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{event.repoFullName}</p>
+                          <p className="mt-1 text-sm text-slate-300/78">{event.summary}</p>
+                        </div>
+                        <div className="text-right text-xs uppercase tracking-[0.18em] text-slate-500">
+                          <p>{event.type.replaceAll("_", " ")}</p>
+                          <p className="mt-2 normal-case tracking-normal">
+                            {event.occurredAt.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
+                    Activity will appear here once the portfolio accrues notes, state changes, and scheduled refreshes.
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <SectionCard
+              eyebrow="Act now"
+              title="Opportunity queue"
+              description="High-signal repos that still lack your own note or decision. This is the best place to turn motion into action."
+            >
+              <div className="space-y-3">
+                {analytics.opportunities.length > 0 ? (
+                  analytics.opportunities.map((repo) => (
+                    <article key={repo.fullName} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-semibold text-white">{repo.fullName}</p>
+                          <p className="mt-1 text-sm text-slate-300/80">
+                            {repo.language ?? "Unknown language"} · {repo.state} · score {repo.momentumScore.toFixed(2)}
+                          </p>
+                          <p className="mt-3 text-sm text-slate-200/82">
+                            {repo.readmeSummary ?? "README enrichment pending. Use repo detail to pull in upstream context."}
+                          </p>
+                        </div>
+                        <div className="text-right text-sm text-cyan-100">
+                          <p>+{repo.starDelta7d} stars</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{repo.reasons.join(" · ")}</p>
+                    </article>
+                  ))
+                ) : (
+                  <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
+                    No obvious action queue right now. That usually means the portfolio is either well-annotated or cold.
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              eyebrow="Recover context"
+              title="Neglect queue"
+              description="Repos that once mattered enough to touch, note, or start, but have since gone stale."
+            >
+              <div className="space-y-3">
+                {analytics.neglectQueue.length > 0 ? (
+                  analytics.neglectQueue.map((repo) => (
+                    <article key={repo.fullName} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-semibold text-white">{repo.fullName}</p>
+                          <p className="mt-1 text-sm text-slate-300/80">
+                            {repo.state} · {repo.noteCount} notes · neglect {repo.neglectScore.toFixed(2)}
+                          </p>
+                        </div>
+                        <p className="text-right text-sm text-slate-300/75">
+                          {repo.lastTouchedAt ? repo.lastTouchedAt.toLocaleDateString("en-US") : "Unknown touch"}
+                        </p>
+                      </div>
+                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{repo.reasons.join(" · ")}</p>
+                    </article>
+                  ))
+                ) : (
+                  <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
+                    No neglect hotspots detected right now.
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </div>
         </>
       )}
     </AppChrome>

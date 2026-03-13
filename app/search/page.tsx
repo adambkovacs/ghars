@@ -21,7 +21,7 @@ export default async function SearchPage() {
       title="Recover the repo you almost remembered"
       subtitle={
         search.hasImport
-          ? `Search across ${search.states.length} imported repos${search.githubLogin ? ` for ${search.githubLogin}` : ""}.`
+          ? `Search across ${search.states.length} imported repos and pulled README context${search.githubLogin ? ` for ${search.githubLogin}` : ""}.`
           : "Import your portfolio first, then search becomes the fastest way back to what you starred."
       }
       badge={search.hasImport ? "Live recall" : "Awaiting first import"}

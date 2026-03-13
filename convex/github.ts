@@ -3,10 +3,12 @@ import { action, internalAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import { GitHubApiGateway } from "../lib/adapters/github/githubApiGateway";
 import { buildDerivedArtifacts } from "../lib/server/portfolio/artifacts";
+import { buildReadmeEnrichment, selectReadmeCandidates } from "../lib/server/portfolio/readme";
 import type {
   GitHubStarEdge,
   PortfolioEvent,
   RepoCatalog,
+  RepoReadme,
   RepoSnapshotDaily,
   ReportSection,
   UserNote,
@@ -28,6 +30,9 @@ type RepoCatalogRow = {
   archived: boolean;
   pushedAt?: number;
   latestReleaseAt?: number;
+  readmeSummary?: string;
+  readmeExcerpt?: string;
+  readmeFetchedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -172,6 +177,9 @@ function toRepoInput(repo: RepoCatalog) {
     archived: repo.archived,
     pushedAt: repo.pushedAt?.getTime() ?? undefined,
     latestReleaseAt: repo.lastReleaseAt?.getTime() ?? undefined,
+    readmeSummary: repo.readmeSummary ?? undefined,
+    readmeExcerpt: repo.readmeExcerpt ?? undefined,
+    readmeFetchedAt: repo.readmeFetchedAt?.getTime() ?? undefined,
     createdAt: repo.createdAt?.getTime() ?? undefined,
     updatedAt: repo.updatedAt?.getTime() ?? Date.now(),
   };
@@ -195,6 +203,9 @@ function mapRepoCatalog(repo: RepoCatalogRow): RepoCatalog {
     archived: repo.archived,
     isFork: false,
     lastReleaseAt: repo.latestReleaseAt ? new Date(repo.latestReleaseAt) : null,
+    readmeSummary: repo.readmeSummary ?? null,
+    readmeExcerpt: repo.readmeExcerpt ?? null,
+    readmeFetchedAt: repo.readmeFetchedAt ? new Date(repo.readmeFetchedAt) : null,
     createdAt: repo.createdAt ? new Date(repo.createdAt) : null,
     updatedAt: repo.updatedAt ? new Date(repo.updatedAt) : null,
   };
@@ -304,6 +315,56 @@ async function loadPortfolioData(ctx: any, authUserId: string) {
   };
 }
 
+async function hydrateReadmesForConnection(input: {
+  ctx: any;
+  connection: GitHubConnectionRow;
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  limit: number;
+}) {
+  const gateway = new GitHubApiGateway(input.connection.accessToken);
+  const candidates = selectReadmeCandidates({
+    repositories: input.repositories,
+    states: input.states,
+    limit: input.limit,
+  });
+
+  const readmes: RepoReadme[] = [];
+  const enrichedRepos: RepoCatalog[] = [];
+
+  for (const repo of candidates) {
+    try {
+      const readme = await gateway.getReadme(repo.fullName);
+      if (!readme) {
+        continue;
+      }
+
+      readmes.push(readme);
+      enrichedRepos.push(buildReadmeEnrichment(repo, readme));
+    } catch (error) {
+      console.error(`Failed to hydrate README for ${repo.fullName}`, error);
+    }
+  }
+
+  if (readmes.length === 0) {
+    return input.repositories;
+  }
+
+  await input.ctx.runMutation(api.portfolio.upsertRepoCatalogs, {
+    repos: enrichedRepos.map((repo: RepoCatalog) => toRepoInput(repo)),
+  });
+  await input.ctx.runMutation(api.portfolio.upsertRepoReadmes, {
+    readmes: readmes.map((readme: RepoReadme) => ({
+      repoFullName: readme.repoId,
+      content: readme.content,
+      fetchedAt: readme.fetchedAt.getTime(),
+    })),
+  });
+
+  const enrichedById = new Map(enrichedRepos.map((repo) => [repo.id, repo]));
+  return input.repositories.map((repo) => enrichedById.get(repo.id) ?? repo);
+}
+
 async function persistArtifacts(
   ctx: any,
   input: {
@@ -395,6 +456,14 @@ async function refreshFullPortfolio(
     scopes: [],
     lastSyncedAt: touchedAt,
   });
+  const portfolio = await loadPortfolioData(ctx, connection.authUserId);
+  await hydrateReadmesForConnection({
+    ctx,
+    connection,
+    repositories: portfolio.repositories,
+    states: portfolio.states,
+    limit: 16,
+  });
   await persistArtifacts(ctx, {
     authUserId: connection.authUserId,
     githubLogin: connection.githubLogin,
@@ -452,6 +521,14 @@ async function refreshPriorityPortfolio(
     accessToken: connection.accessToken,
     scopes: [],
     lastSyncedAt: touchedAt,
+  });
+  const portfolio = await loadPortfolioData(ctx, connection.authUserId);
+  await hydrateReadmesForConnection({
+    ctx,
+    connection,
+    repositories: portfolio.repositories,
+    states: portfolio.states,
+    limit: Math.max(6, refreshed.length),
   });
   await persistArtifacts(ctx, {
     authUserId: connection.authUserId,

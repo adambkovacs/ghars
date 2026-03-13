@@ -15,11 +15,15 @@ This is the short-term execution queue. The canonical longer-horizon status live
    - show priority-refresh vs full-refresh timing
    - surface last cron-driven snapshot activity
    - make it obvious when dashboard data is fresh vs stale
-3. Deepen analytics drill-downs beyond the current ranking cards:
+3. Backfill README enrichment more visibly across cold portfolios:
+   - surface README coverage progress in the dashboard
+   - show which repos still lack README context
+   - optionally add a manual "enrich now" control for the current repo or portfolio slice
+4. Deepen analytics drill-downs beyond the current ranking cards:
    - clickable momentum explanations
    - cluster drill-down from the constellation/analytics surface
    - per-repo historical snapshot inspection from analytics
-4. Add true note editing and deletion for existing notes, not just note creation
+5. Add true note editing and deletion for existing notes, not just note creation
 
 ## Next
 

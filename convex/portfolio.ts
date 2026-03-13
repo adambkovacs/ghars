@@ -33,8 +33,17 @@ const repoInputValidator = v.object({
   archived: v.boolean(),
   pushedAt: v.optional(v.number()),
   latestReleaseAt: v.optional(v.number()),
+  readmeSummary: v.optional(v.string()),
+  readmeExcerpt: v.optional(v.string()),
+  readmeFetchedAt: v.optional(v.number()),
   createdAt: v.optional(v.number()),
   updatedAt: v.optional(v.number()),
+});
+
+const repoReadmeInputValidator = v.object({
+  repoFullName: v.string(),
+  content: v.string(),
+  fetchedAt: v.number(),
 });
 
 const starEdgeInputValidator = v.object({
@@ -82,6 +91,9 @@ function serializeRepoCatalog(repo: {
   archived: boolean;
   pushedAt?: number;
   latestReleaseAt?: number;
+  readmeSummary?: string;
+  readmeExcerpt?: string;
+  readmeFetchedAt?: number;
   createdAt: number;
   updatedAt: number;
 }) {
@@ -100,6 +112,9 @@ function serializeRepoCatalog(repo: {
     archived: repo.archived,
     pushedAt: repo.pushedAt,
     latestReleaseAt: repo.latestReleaseAt,
+    readmeSummary: repo.readmeSummary,
+    readmeExcerpt: repo.readmeExcerpt,
+    readmeFetchedAt: repo.readmeFetchedAt,
     createdAt: repo.createdAt,
     updatedAt: repo.updatedAt,
   };
@@ -259,6 +274,9 @@ export const listReposByFullNames = query({
       archived: v.boolean(),
       pushedAt: v.optional(v.number()),
       latestReleaseAt: v.optional(v.number()),
+      readmeSummary: v.optional(v.string()),
+      readmeExcerpt: v.optional(v.string()),
+      readmeFetchedAt: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
@@ -274,6 +292,39 @@ export const listReposByFullNames = query({
       const repo = repoByFullName.get(fullName);
       return repo ? [repo] : [];
     });
+  },
+});
+
+export const getRepoReadmeByFullName = query({
+  args: {
+    repoFullName: v.string(),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      content: v.string(),
+      fetchedAt: v.number(),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const repo = await findRepoByFullName(ctx, args.repoFullName);
+    if (!repo) {
+      return null;
+    }
+
+    const readme = await ctx.db
+      .query("repoReadmes")
+      .withIndex("by_repoId", (q) => q.eq("repoId", repo._id))
+      .unique();
+
+    if (!readme) {
+      return null;
+    }
+
+    return {
+      content: readme.content,
+      fetchedAt: readme.fetchedAt,
+    };
   },
 });
 
@@ -304,6 +355,42 @@ export const getGitHubConnection = query({
     return {
       githubUserId: connection.githubUserId,
       githubLogin: connection.githubLogin,
+      lastSyncedAt: connection.lastSyncedAt,
+      createdAt: connection.createdAt,
+      updatedAt: connection.updatedAt,
+    };
+  },
+});
+
+export const getGitHubConnectionWithAccessToken = query({
+  args: {
+    authUserId: v.string(),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      githubUserId: v.string(),
+      githubLogin: v.string(),
+      accessToken: v.optional(v.string()),
+      lastSyncedAt: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const connection = await ctx.db
+      .query("githubConnections")
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", args.authUserId))
+      .unique();
+
+    if (!connection) {
+      return null;
+    }
+
+    return {
+      githubUserId: connection.githubUserId,
+      githubLogin: connection.githubLogin,
+      accessToken: connection.accessToken,
       lastSyncedAt: connection.lastSyncedAt,
       createdAt: connection.createdAt,
       updatedAt: connection.updatedAt,
@@ -364,6 +451,9 @@ export const upsertRepoCatalogs = mutation({
         archived: repo.archived,
         pushedAt: repo.pushedAt,
         latestReleaseAt: repo.latestReleaseAt,
+        readmeSummary: repo.readmeSummary,
+        readmeExcerpt: repo.readmeExcerpt,
+        readmeFetchedAt: repo.readmeFetchedAt,
         createdAt: repo.createdAt ?? Date.now(),
         updatedAt: repo.updatedAt ?? Date.now(),
       };
@@ -372,6 +462,41 @@ export const upsertRepoCatalogs = mutation({
         await ctx.db.patch(existing._id, payload);
       } else {
         await ctx.db.insert("repoCatalog", payload);
+      }
+    }
+
+    return null;
+  },
+});
+
+export const upsertRepoReadmes = mutation({
+  args: {
+    readmes: v.array(repoReadmeInputValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const readme of args.readmes) {
+      const repo = await findRepoByFullName(ctx, readme.repoFullName);
+      if (!repo) {
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("repoReadmes")
+        .withIndex("by_repoId", (q) => q.eq("repoId", repo._id))
+        .unique();
+
+      const payload = {
+        repoId: repo._id,
+        content: readme.content,
+        fetchedAt: readme.fetchedAt,
+        updatedAt: Date.now(),
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, payload);
+      } else {
+        await ctx.db.insert("repoReadmes", payload);
       }
     }
 

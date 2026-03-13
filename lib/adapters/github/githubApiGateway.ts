@@ -1,5 +1,5 @@
 import type { GitHubGateway } from "../../ports";
-import type { GitHubStarPage, RepoCatalog } from "../../domain/types";
+import type { GitHubStarPage, RepoCatalog, RepoReadme } from "../../domain/types";
 
 const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
 const GITHUB_REST_URL = "https://api.github.com";
@@ -209,6 +209,34 @@ export class GitHubApiGateway implements GitHubGateway {
 
     const release = (await response.json()) as { published_at?: string | null };
     return release.published_at ? new Date(release.published_at) : null;
+  }
+
+  async getReadme(fullName: string): Promise<RepoReadme | null> {
+    const response = await fetch(`${GITHUB_REST_URL}/repos/${fullName}/readme`, {
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        Accept: "application/vnd.github.raw+json",
+      },
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`GitHub README request failed with ${response.status}`);
+    }
+
+    const content = (await response.text()).trim();
+    if (!content) {
+      return null;
+    }
+
+    return {
+      repoId: toRepoId(fullName),
+      content,
+      fetchedAt: new Date(),
+    };
   }
 }
 

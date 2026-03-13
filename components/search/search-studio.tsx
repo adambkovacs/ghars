@@ -93,7 +93,7 @@ export function SearchStudio({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search notes, topics, language, state, or repo name"
+              placeholder="Search notes, README context, topics, language, state, or repo name"
               className="w-full bg-transparent text-base text-white outline-none placeholder:text-slate-500"
             />
           </label>
@@ -148,7 +148,10 @@ export function SearchStudio({
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {results.map((result) => {
-              const latestNote = result.notes[0]?.content ?? "No personal notes yet. This card is currently driven by imported repo facts plus your saved state.";
+              const latestNote =
+                result.notes[0]?.content ??
+                result.repo.readmeSummary ??
+                "No personal notes yet. README enrichment will give this card more substance once it lands.";
 
               return (
                 <article
@@ -191,7 +194,7 @@ export function SearchStudio({
                     <div className="rounded-[1.2rem] border border-white/8 bg-slate-950/45 px-3 py-3">
                       <p className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-slate-400">
                         <Sparkle className="h-3.5 w-3.5 text-cyan-200" />
-                        Latest note
+                        {result.notes.length > 0 ? "Latest note" : result.repo.readmeSummary ? "README signal" : "Context"}
                       </p>
                       <p className="mt-2 text-sm text-slate-200/85">{latestNote}</p>
                     </div>

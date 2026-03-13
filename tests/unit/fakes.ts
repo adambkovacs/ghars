@@ -4,6 +4,7 @@ import type {
   GitHubGateway,
   PortfolioEventStore,
   RepoCatalogStore,
+  RepoReadmeStore,
   ReportSnapshotStore,
   SnapshotStore,
   UserNoteStore,
@@ -13,6 +14,7 @@ import type {
   GitHubStarPage,
   PortfolioEvent,
   RepoCatalog,
+  RepoReadme,
   RepoSnapshotDaily,
   ReportSnapshot,
   UserNote,
@@ -30,7 +32,8 @@ export class FixedClock implements Clock {
 export class InMemoryGitHubGateway implements GitHubGateway {
   constructor(
     private readonly pages: GitHubStarPage[],
-    private readonly releases: Record<string, Date | null> = {}
+    private readonly releases: Record<string, Date | null> = {},
+    private readonly readmes: Record<string, string> = {}
   ) {}
 
   private index = 0;
@@ -54,6 +57,18 @@ export class InMemoryGitHubGateway implements GitHubGateway {
   async getLatestRelease(fullName: string): Promise<Date | null> {
     return this.releases[fullName] ?? null;
   }
+
+  async getReadme(fullName: string): Promise<RepoReadme | null> {
+    const content =
+      this.readmes[fullName] ??
+      `# ${fullName}\n\nThis README explains how ${fullName} works in a starred portfolio workflow.`;
+
+    return {
+      repoId: fullName.toLowerCase(),
+      content,
+      fetchedAt: new Date("2026-03-11T00:00:00.000Z"),
+    };
+  }
 }
 
 export class InMemoryRepoCatalogStore implements RepoCatalogStore {
@@ -70,6 +85,20 @@ export class InMemoryRepoCatalogStore implements RepoCatalogStore {
       const repo = this.records.get(repoId);
       return repo ? [repo] : [];
     });
+  }
+}
+
+export class InMemoryRepoReadmeStore implements RepoReadmeStore {
+  public readonly records = new Map<string, RepoReadme>();
+
+  async get(repoId: string): Promise<RepoReadme | null> {
+    return this.records.get(repoId) ?? null;
+  }
+
+  async upsertMany(readmes: RepoReadme[]): Promise<void> {
+    for (const readme of readmes) {
+      this.records.set(readme.repoId, readme);
+    }
   }
 }
 

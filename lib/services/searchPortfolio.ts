@@ -83,6 +83,8 @@ export function searchPortfolio(input: {
       } else {
         const fullName = repo.fullName.toLowerCase();
         const description = repo.description.toLowerCase();
+        const readmeSummary = repo.readmeSummary?.toLowerCase() ?? "";
+        const readmeExcerpt = repo.readmeExcerpt?.toLowerCase() ?? "";
         const topics = repo.topics.map((topic) => topic.toLowerCase());
         const noteText = repoNotes.map((note) => note.content.toLowerCase()).join(" ");
 
@@ -97,6 +99,14 @@ export function searchPortfolio(input: {
         if (description.includes(query)) {
           score += 18;
           reasons.push("description");
+        }
+        if (readmeSummary.includes(query)) {
+          score += 26;
+          reasons.push("readme summary");
+        }
+        if (readmeExcerpt.includes(query)) {
+          score += 14;
+          reasons.push("readme");
         }
         if (topics.some((topic) => topic.includes(query))) {
           score += 14;

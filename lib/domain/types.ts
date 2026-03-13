@@ -27,8 +27,17 @@ export interface RepoCatalog {
   archived: boolean;
   isFork: boolean;
   lastReleaseAt?: Date | null;
+  readmeSummary?: string | null;
+  readmeExcerpt?: string | null;
+  readmeFetchedAt?: Date | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+}
+
+export interface RepoReadme {
+  repoId: string;
+  content: string;
+  fetchedAt: Date;
 }
 
 export interface GitHubStarEdge {
