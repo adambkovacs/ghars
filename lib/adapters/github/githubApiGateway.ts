@@ -68,6 +68,7 @@ export class GitHubApiGateway implements GitHubGateway {
     }
 
     const payload = (await response.json()) as {
+      errors?: Array<{ message?: string }>;
       data?: {
         viewer?: {
           starredRepositories?: {
@@ -98,6 +99,10 @@ export class GitHubApiGateway implements GitHubGateway {
         };
       };
     };
+
+    if (payload.errors?.length) {
+      throw new Error(payload.errors.map((error) => error.message ?? "Unknown GitHub GraphQL error").join("; "));
+    }
 
     const starred = payload.data?.viewer?.starredRepositories;
 

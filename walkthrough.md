@@ -20,6 +20,8 @@ Build `ghars` as a dashboard-first GitHub stars observability product with memor
 - Search and repo detail now read from the imported portfolio runtime.
 - Analytics now reads from the imported portfolio runtime.
 - Reports now render live generated portfolio reviews from imported data.
+- The authenticated production crash path was fixed in Convex by serializing repo query results instead of returning raw documents that violate strict return validators.
+- The live production runtime has been exercised against a real 439-star portfolio and now builds dashboard, search, analytics, and report models successfully.
 - Service-layer coverage is currently broader than the live UI integration.
 
 ## Follow-up
@@ -27,6 +29,6 @@ Build `ghars` as a dashboard-first GitHub stars observability product with memor
 - Keep v1 auth GitHub-only through Auth.js. That matches the product better than mixed auth methods because every meaningful user action depends on GitHub data.
 - GitHub login and GitHub authorization remain the same flow in v1. There is no separate GitHub-app authorization step.
 - Deepen note and state editing on repo detail, then add snapshot-backed momentum history and persisted report snapshots
-- Production GitHub OAuth credentials are configured; the remaining auth step is verifying a full live user login and import
+- Production GitHub OAuth credentials are configured; the remaining auth step is one last manual browser import verification after the Convex fix
 - Tune scoring and cluster narratives with real data
 - Treat `/plan` as the canonical planning location going forward

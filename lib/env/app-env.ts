@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cleanEnvValue } from "@/lib/env/normalize";
 
 const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -23,18 +24,18 @@ const envSchema = z.object({
 });
 
 const rawEnv = {
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
-  CONVEX_DEPLOYMENT: process.env.CONVEX_DEPLOYMENT,
-  CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY,
-  AUTH_SECRET: process.env.AUTH_SECRET,
-  AUTH_GITHUB_ID: process.env.AUTH_GITHUB_ID,
-  AUTH_GITHUB_SECRET: process.env.AUTH_GITHUB_SECRET,
-  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-  OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
-  OPENROUTER_EMBED_MODEL: process.env.OPENROUTER_EMBED_MODEL,
-  GHARS_DEMO_MODE: process.env.GHARS_DEMO_MODE,
-  E2E_TEST_MODE: process.env.E2E_TEST_MODE,
+  NEXT_PUBLIC_APP_URL: cleanEnvValue(process.env.NEXT_PUBLIC_APP_URL),
+  NEXT_PUBLIC_CONVEX_URL: cleanEnvValue(process.env.NEXT_PUBLIC_CONVEX_URL),
+  CONVEX_DEPLOYMENT: cleanEnvValue(process.env.CONVEX_DEPLOYMENT),
+  CONVEX_DEPLOY_KEY: cleanEnvValue(process.env.CONVEX_DEPLOY_KEY),
+  AUTH_SECRET: cleanEnvValue(process.env.AUTH_SECRET),
+  AUTH_GITHUB_ID: cleanEnvValue(process.env.AUTH_GITHUB_ID),
+  AUTH_GITHUB_SECRET: cleanEnvValue(process.env.AUTH_GITHUB_SECRET),
+  OPENROUTER_API_KEY: cleanEnvValue(process.env.OPENROUTER_API_KEY),
+  OPENROUTER_TEXT_MODEL: cleanEnvValue(process.env.OPENROUTER_TEXT_MODEL),
+  OPENROUTER_EMBED_MODEL: cleanEnvValue(process.env.OPENROUTER_EMBED_MODEL),
+  GHARS_DEMO_MODE: cleanEnvValue(process.env.GHARS_DEMO_MODE),
+  E2E_TEST_MODE: cleanEnvValue(process.env.E2E_TEST_MODE),
   NODE_ENV: process.env.NODE_ENV,
 };
 

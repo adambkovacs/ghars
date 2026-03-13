@@ -9,6 +9,9 @@
   --accent-strong: #9effc6;
   --border: rgba(255, 255, 255, 0.12);
   --shadow: 0 24px 120px rgba(0, 0, 0, 0.42);
+  --font-body: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-brand: "Optima", "Avenir Next Condensed", "Trebuchet MS", sans-serif;
+  --font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco", monospace;
 }
 
 @theme inline {

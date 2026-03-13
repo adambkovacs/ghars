@@ -4,12 +4,13 @@ This is the short-term execution queue. The canonical longer-horizon status live
 
 ## Now
 
-1. Verify the true production webapp flow end to end:
+1. Verify the final manual production webapp click-through end to end:
    - signed-out user lands on `/`
    - user signs in with GitHub
    - user lands on `/dashboard`
    - user imports starred repos
    - imported dashboard data renders for that user only
+   - note: the live backend path is already verified against a real 439-star portfolio
 2. Tighten the authenticated app chrome so signed-in users do not see generic sign-in CTAs
 3. Add live note and state editing to repo detail and search-driven workflows
 4. Wire snapshot-backed momentum history so analytics and reports stop relying on recency-only heat

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 const repoStateValidator = v.union(
   v.literal("saved"),
@@ -47,6 +48,62 @@ const eventInputValidator = v.object({
   repoFullName: v.optional(v.string()),
   payload: v.optional(v.any()),
 });
+
+async function findRepoByFullName(
+  ctx: QueryCtx | MutationCtx,
+  fullName: string
+) {
+  const exact = await ctx.db
+    .query("repoCatalog")
+    .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+    .unique();
+
+  if (exact) {
+    return exact;
+  }
+
+  const normalized = fullName.toLowerCase();
+  const allRepos = await ctx.db.query("repoCatalog").collect();
+  return allRepos.find((repo) => repo.fullName.toLowerCase() === normalized) ?? null;
+}
+
+function serializeRepoCatalog(repo: {
+  fullName: string;
+  owner: string;
+  name: string;
+  description?: string;
+  homepage?: string;
+  primaryLanguage?: string;
+  topics: string[];
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  archived: boolean;
+  pushedAt?: number;
+  latestReleaseAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}) {
+  return {
+    fullName: repo.fullName,
+    owner: repo.owner,
+    name: repo.name,
+    description: repo.description,
+    homepage: repo.homepage,
+    primaryLanguage: repo.primaryLanguage,
+    topics: repo.topics,
+    stars: repo.stars,
+    forks: repo.forks,
+    openIssues: repo.openIssues,
+    watchers: repo.watchers,
+    archived: repo.archived,
+    pushedAt: repo.pushedAt,
+    latestReleaseAt: repo.latestReleaseAt,
+    createdAt: repo.createdAt,
+    updatedAt: repo.updatedAt,
+  };
+}
 
 export const listUserRepoStates = query({
   args: {
@@ -169,14 +226,16 @@ export const listReposByFullNames = query({
     })
   ),
   handler: async (ctx, args) => {
-    const uniqueFullNames = [...new Set(args.fullNames)];
-    const repos = await Promise.all(
-      uniqueFullNames.map((fullName) =>
-        ctx.db.query("repoCatalog").withIndex("by_fullName", (q) => q.eq("fullName", fullName)).unique()
-      )
+    const uniqueFullNames = [...new Set(args.fullNames.map((fullName) => fullName.toLowerCase()))];
+    const repoCatalog = await ctx.db.query("repoCatalog").collect();
+    const repoByFullName = new Map(
+      repoCatalog.map((repo) => [repo.fullName.toLowerCase(), serializeRepoCatalog(repo)])
     );
 
-    return repos.flatMap((repo) => (repo ? [repo] : []));
+    return uniqueFullNames.flatMap((fullName) => {
+      const repo = repoByFullName.get(fullName);
+      return repo ? [repo] : [];
+    });
   },
 });
 
@@ -221,10 +280,7 @@ export const upsertRepoCatalogs = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     for (const repo of args.repos) {
-      const existing = await ctx.db
-        .query("repoCatalog")
-        .withIndex("by_fullName", (q) => q.eq("fullName", repo.fullName))
-        .unique();
+      const existing = await findRepoByFullName(ctx, repo.fullName);
 
       const payload = {
         fullName: repo.fullName,
@@ -265,10 +321,7 @@ export const upsertStarEdges = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     for (const edge of args.edges) {
-      const repo = await ctx.db
-        .query("repoCatalog")
-        .withIndex("by_fullName", (q) => q.eq("fullName", edge.fullName))
-        .unique();
+      const repo = await findRepoByFullName(ctx, edge.fullName);
 
       if (!repo) {
         continue;
@@ -320,12 +373,7 @@ export const appendPortfolioEvents = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     for (const event of args.events) {
-      const repo = event.repoFullName
-        ? await ctx.db
-            .query("repoCatalog")
-            .withIndex("by_fullName", (q) => q.eq("fullName", event.repoFullName!))
-            .unique()
-        : null;
+      const repo = event.repoFullName ? await findRepoByFullName(ctx, event.repoFullName) : null;
 
       await ctx.db.insert("portfolioEvents", {
         authUserId: args.authUserId,
@@ -387,10 +435,7 @@ export const changeRepoState = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const repo = await ctx.db
-      .query("repoCatalog")
-      .withIndex("by_fullName", (q) => q.eq("fullName", args.repoFullName))
-      .unique();
+    const repo = await findRepoByFullName(ctx, args.repoFullName);
 
     if (!repo) {
       return null;
@@ -433,10 +478,7 @@ export const addNote = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const repo = await ctx.db
-      .query("repoCatalog")
-      .withIndex("by_fullName", (q) => q.eq("fullName", args.repoFullName))
-      .unique();
+    const repo = await findRepoByFullName(ctx, args.repoFullName);
 
     if (!repo) {
       return null;

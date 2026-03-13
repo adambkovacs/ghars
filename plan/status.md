@@ -11,6 +11,8 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 - Search and repo detail now consume imported portfolio data
 - Analytics now consumes imported portfolio data
 - Reports now render live generated portfolio reviews from imported data
+- The authenticated production crash caused by a Convex return-validator mismatch is fixed
+- The production runtime has been exercised against a real 439-star portfolio using the live backend path
 - Service-layer coverage is ahead of UI integration coverage
 
 ## Phase status
@@ -18,7 +20,7 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 | Phase | Status | Notes | Proof |
 | --- | --- | --- | --- |
 | 0. Repo and design foundation | done | App shell, routes, tests, docs, and environment scaffolding are in place | [Landing page](../app/page.tsx), [app chrome](../components/layout/app-chrome.tsx), [smoke tests](../e2e/smoke.spec.ts) |
-| 1. Auth and GitHub import | partial | Production auth secrets are configured and the live sign-in page now exposes GitHub login; a real user-authenticated import still needs live verification | [Auth config](../auth.ts), [dashboard action](../app/dashboard/actions.ts), [GitHub gateway](../lib/adapters/github/githubApiGateway.ts) |
+| 1. Auth and GitHub import | partial | Production auth secrets are configured, the live sign-in page exposes GitHub login, and the live backend import/runtime path has been verified on a 439-star portfolio; one manual browser import click-through still remains | [Auth config](../auth.ts), [dashboard action](../app/dashboard/actions.ts), [GitHub gateway](../lib/adapters/github/githubApiGateway.ts), [Convex query fix](../convex/portfolio.ts) |
 | 2. Notes, states, and search core | partial | Search now uses imported data, but note editing and state mutation are not yet wired into the live UI | [service tests](../tests/unit/services.test.ts), [search service](../lib/services/searchPortfolio.ts), [search UI](../components/search/search-studio.tsx) |
 | 3. Dashboard alpha and chart system | partial | Dashboard and analytics are live; note/state editing and historical snapshot depth are still incomplete | [dashboard page](../app/dashboard/page.tsx), [analytics page](../app/analytics/page.tsx), [state ring](../components/charts/state-ring.tsx) |
 | 4. Momentum engine and scheduled refresh | partial | Scoring services exist, but live scheduled refresh is not fully integrated into the product UI | [momentum service](../lib/services/computeMomentumScore.ts), [neglect service](../lib/services/generateNeglectSignals.ts), [crons](../convex/crons.ts) |
@@ -43,7 +45,8 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 - `AUTH_GITHUB_ID` is configured in Vercel
 - `AUTH_GITHUB_SECRET` is configured in Vercel
 - `ghars.vercel.app/sign-in` now renders the live `Continue with GitHub` flow
-- A full production user-authenticated import still needs manual verification with a real GitHub account
+- The live backend import/runtime path now succeeds against a real 439-star portfolio
+- A final manual browser click-through of sign-in -> import still remains
 
 ## Important evidence notes
 
@@ -51,4 +54,5 @@ This file is the canonical execution tracker. A plan item is only `done` when th
 - The dashboard import slice is implemented end to end through session -> action -> import service -> persistence -> dashboard model: [dashboard page](../app/dashboard/page.tsx), [dashboard action](../app/dashboard/actions.ts), [runtime assembly](../lib/server/portfolio/runtime.ts)
 - Search and repo detail now read from the shared imported-portfolio runtime instead of the demo dataset: [search page](../app/search/page.tsx), [repo detail page](../app/repo/[owner]/[name]/page.tsx), [runtime assembly](../lib/server/portfolio/runtime.ts), [Playwright flow](../e2e/smoke.spec.ts)
 - Analytics and reports now read from the shared imported-portfolio runtime instead of demo data: [analytics page](../app/analytics/page.tsx), [reports page](../app/reports/page.tsx), [runtime assembly](../lib/server/portfolio/runtime.ts), [Playwright flow](../e2e/smoke.spec.ts)
+- The production crash fix lives in the Convex repo lookup query, which now serializes return values and normalizes full-name lookups before returning them: [Convex portfolio query](../convex/portfolio.ts)
 - Current unit and service tests cover more product behavior than the UI currently exposes with live data

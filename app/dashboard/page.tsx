@@ -5,9 +5,9 @@ import { AppChrome } from "@/components/layout/app-chrome";
 import { SectionCard } from "@/components/layout/section-card";
 import { AnimatedValue } from "@/components/charts/animated-value";
 import { StateRing } from "@/components/charts/state-ring";
+import { ImportPortfolioForm } from "@/components/dashboard/import-portfolio-form";
 import { appEnv } from "@/lib/env/app-env";
 import { getPortfolioRuntime } from "@/lib/server/portfolio/runtime";
-import { importStarredReposAction } from "./actions";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -43,12 +43,7 @@ export default async function DashboardPage() {
               <p className="text-sm leading-6 text-slate-300/82">
                 Press the import button once and ghars will fetch your starred repositories, write them into the portfolio store, and switch this dashboard over to live data.
               </p>
-              <form action={importStarredReposAction}>
-                <button className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:translate-y-[-1px]">
-                  <Download className="h-4 w-4" />
-                  Import starred repos
-                </button>
-              </form>
+              <ImportPortfolioForm />
             </div>
 
             <div className="rounded-[1.7rem] border border-white/8 bg-white/[0.03] p-5">
@@ -108,12 +103,7 @@ export default async function DashboardPage() {
               <div className="space-y-4 text-sm text-slate-300/82">
                 <p>Last sync: {dashboard.lastSyncedAt?.toLocaleString("en-US") ?? "Unknown"}</p>
                 <p>GitHub login: {dashboard.githubLogin ?? session.githubLogin ?? "unknown"}</p>
-                <form action={importStarredReposAction}>
-                  <button className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08]">
-                    <RefreshCw className="h-4 w-4" />
-                    Reimport portfolio
-                  </button>
-                </form>
+                <ImportPortfolioForm mode="secondary" />
               </div>
             </SectionCard>
           </div>

@@ -1,16 +1,19 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
+import { cleanEnvValue } from "@/lib/env/normalize";
 import { resetTestPortfolioRuntime } from "@/lib/server/portfolio/runtime";
 
+const githubClientId = cleanEnvValue(process.env.AUTH_GITHUB_ID);
+const githubClientSecret = cleanEnvValue(process.env.AUTH_GITHUB_SECRET);
 const authSecret =
-  process.env.AUTH_SECRET ??
+  cleanEnvValue(process.env.AUTH_SECRET) ??
   (process.env.NODE_ENV === "production" ? undefined : "ghars-dev-secret");
 
 const isE2ETestMode = process.env.E2E_TEST_MODE === "true";
 const githubConfigured =
-  Boolean(process.env.AUTH_GITHUB_ID) &&
-  Boolean(process.env.AUTH_GITHUB_SECRET) &&
+  Boolean(githubClientId) &&
+  Boolean(githubClientSecret) &&
   Boolean(authSecret);
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -33,7 +36,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }),
         ]
       : []),
-    ...(githubConfigured ? [GitHub] : []),
+    ...(githubConfigured
+      ? [
+          GitHub({
+            clientId: githubClientId!,
+            clientSecret: githubClientSecret!,
+          }),
+        ]
+      : []),
   ],
   pages: {
     signIn: "/sign-in",

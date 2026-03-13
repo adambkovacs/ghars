@@ -46,6 +46,8 @@ next-env.d.ts
 # convex
 /convex/_generated
 /convex/*.js
+/convex/*.js.map
 
 # clerk configuration (can include secrets)
 /.clerk/
+.env*.local

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const projectRoot = __dirname;
+const devPort = process.env.PLAYWRIGHT_PORT || "3100";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -10,7 +11,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? "github" : "html",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${devPort}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -21,9 +22,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- --hostname 127.0.0.1 --port 3000`,
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${devPort}`,
     cwd: projectRoot,
-    url: "http://127.0.0.1:3000",
+    url: `http://127.0.0.1:${devPort}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
