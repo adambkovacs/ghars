@@ -28,9 +28,9 @@ The repo includes:
 - Convex schema and production function scaffolding
 - a real dashboard import slice driven by the signed-in session and the import service
 - live imported search and repo detail surfaces
-- demo-backed analytics and reports surfaces
+- live imported analytics and live generated reports surfaces
 - pure domain services and tests that are broader than the current UI integration
-- Playwright coverage for signed-out routing plus a test-mode login and import flow
+- Playwright coverage for signed-out routing plus a test-mode login, import, search, repo drill-down, analytics, and reports flow
 - live GitHub repo, Vercel project, and Convex deployment infrastructure
 
 ## Environment

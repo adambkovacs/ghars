@@ -61,4 +61,15 @@ test("signs in and imports a portfolio in test mode", async ({ page }) => {
   await expect(page).toHaveURL(/\/repo\/apify\/crawlee$/);
   await expect(page.getByText(/imported into e2e-user/i)).toBeVisible();
   await expect(page.getByText(/no personal notes yet/i)).toBeVisible();
+
+  await page.goto("/analytics");
+  await expect(page.getByRole("heading", { name: /structure, drift, and heat/i })).toBeVisible();
+  await expect(page.getByText(/live imported analytics/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /apify\/crawlee/i })).toBeVisible();
+  await expect(page.getByText(/theme migration/i)).toBeVisible();
+
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: /live generated portfolio reviews/i })).toBeVisible();
+  await expect(page.getByText(/weekly live portfolio review/i)).toBeVisible();
+  await expect(page.getByText(/11 tracked repos/i).first()).toBeVisible();
 });
