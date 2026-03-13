@@ -44,7 +44,6 @@ yarn-error.log*
 next-env.d.ts
 
 # convex
-/convex/_generated
 /convex/*.js
 /convex/*.js.map
 /lib/adapters/github/githubApiGateway.js
