@@ -2,6 +2,14 @@
 
 `ghars` is a portfolio observability dashboard for GitHub stars. It helps you see the structure, movement, and meaning of your starred repo universe, then drill into memory, search, and action.
 
+## Canonical plan
+
+The product definition and execution status now live under `plan/`.
+
+- [PRD](plan/prd.md)
+- [Execution status](plan/status.md)
+- [Next work queue](plan/next.md)
+
 ## Stack
 
 - Next.js 16
@@ -11,18 +19,18 @@
 - OpenRouter
 - GSAP, Lenis, Three.js
 
-## Current status
+## Current implementation snapshot
 
 The repo includes:
 
-- dashboard-first product shell
-- demo-mode portfolio data so the app runs before keys are configured
-- pure domain services and tests for search, notes, import, analytics, and reports
-- Convex schema and adapter scaffolding for production data flows
+- public landing page plus protected app surfaces
 - Auth.js GitHub-only auth scaffolding with App Router handlers and protected-route proxy
-- a live dashboard import slice driven by the signed-in session and the existing import service
-- a test-mode login and import path for end-to-end coverage in Playwright
-- live GitHub repo and Vercel deployment infrastructure
+- Convex schema and production function scaffolding
+- a real dashboard import slice driven by the signed-in session and the import service
+- demo-backed search, analytics, reports, and repo detail surfaces
+- pure domain services and tests that are broader than the current UI integration
+- Playwright coverage for signed-out routing plus a test-mode login and import flow
+- live GitHub repo, Vercel project, and Convex deployment infrastructure
 
 ## Environment
 
@@ -44,15 +52,16 @@ Optional during development:
 
 ## Verification
 
-- `bun run test` covers the pure service layer, including route access policy
+- `bun run test` covers the pure service layer, including route access policy and portfolio services
 - `bun run test:e2e` covers the public landing, protected-route redirects, `/login` aliasing, and a full sign-in plus import flow in `E2E_TEST_MODE`
-- Real GitHub OAuth in production still requires `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`
+- Real GitHub OAuth in production still requires `AUTH_SECRET`, `AUTH_GITHUB_ID`, and `AUTH_GITHUB_SECRET`
 
 ## Product decisions
 
 - v1 auth is GitHub-only through Auth.js. Email and password flows add friction without helping the core job.
+- GitHub login and GitHub authorization are the same user flow in v1.
 - GitHub import is the primary onboarding path after sign-in.
-- BYOK AI should be optional. The default product path should work with a platform-managed AI key, and advanced users can later attach their own OpenRouter key for summaries, embeddings, and heavier personal usage.
+- `/plan` is the canonical source of truth for scope and progress.
 
 ## Scripts
 
@@ -71,14 +80,6 @@ bun install
 cp .env.example .env.local
 bun run dev:demo
 ```
-
-## Product scope
-
-- Portfolio Overview
-- Search and triage
-- Repo detail with notes and state
-- Analytics and reports
-- Constellation view
 
 ## License
 
