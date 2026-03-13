@@ -194,10 +194,48 @@ export const listUserNotes = query({
           repoFullName,
           body: note.body,
           createdAt: note.createdAt,
-          updatedAt: note.createdAt,
+          updatedAt: note.updatedAt ?? note.createdAt,
         },
       ];
     });
+  },
+});
+
+export const listPortfolioEvents = query({
+  args: {
+    authUserId: v.string(),
+  },
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      repoFullName: v.optional(v.string()),
+      type: portfolioEventTypeValidator,
+      createdAt: v.number(),
+      metadata: v.optional(v.any()),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const events = await ctx.db
+      .query("portfolioEvents")
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", args.authUserId))
+      .order("desc")
+      .collect();
+
+    const repoIds = [...new Set(events.map((event) => event.repoId).filter(Boolean))];
+    const repos = await Promise.all(repoIds.map((repoId) => ctx.db.get(repoId!)));
+    const fullNameByRepoId = new Map(
+      repos
+        .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
+        .map((repo) => [repo._id, repo.fullName])
+    );
+
+    return events.map((event) => ({
+      id: event._id,
+      repoFullName: event.repoId ? fullNameByRepoId.get(event.repoId) : undefined,
+      type: event.type,
+      createdAt: event.createdAt,
+      metadata: event.metadata,
+    }));
   },
 });
 
@@ -270,6 +308,35 @@ export const getGitHubConnection = query({
       createdAt: connection.createdAt,
       updatedAt: connection.updatedAt,
     };
+  },
+});
+
+export const listGitHubConnectionsWithAccessToken = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      authUserId: v.string(),
+      githubUserId: v.string(),
+      githubLogin: v.string(),
+      accessToken: v.string(),
+      lastSyncedAt: v.optional(v.number()),
+    })
+  ),
+  handler: async (ctx) => {
+    const connections = await ctx.db.query("githubConnections").collect();
+    return connections.flatMap((connection) =>
+      connection.accessToken
+        ? [
+            {
+              authUserId: connection.authUserId,
+              githubUserId: connection.githubUserId,
+              githubLogin: connection.githubLogin,
+              accessToken: connection.accessToken,
+              lastSyncedAt: connection.lastSyncedAt,
+            },
+          ]
+        : []
+    );
   },
 });
 
@@ -432,6 +499,11 @@ export const changeRepoState = mutation({
     authUserId: v.string(),
     repoFullName: v.string(),
     state: repoStateValidator,
+    starredAt: v.optional(v.number()),
+    lastViewedAt: v.optional(v.number()),
+    lastTouchedAt: v.optional(v.number()),
+    tags: v.optional(v.array(v.string())),
+    noteCount: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -454,16 +526,12 @@ export const changeRepoState = mutation({
 
     await ctx.db.patch(existing._id, {
       state: args.state,
-      lastTouchedAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    await ctx.db.insert("portfolioEvents", {
-      authUserId: args.authUserId,
-      repoId: repo._id,
-      type: "state_changed",
-      metadata: { state: args.state },
-      createdAt: Date.now(),
+      starredAt: args.starredAt ?? existing.starredAt,
+      lastViewedAt: args.lastViewedAt ?? existing.lastViewedAt,
+      lastTouchedAt: args.lastTouchedAt ?? Date.now(),
+      tags: args.tags ?? existing.tags,
+      noteCount: args.noteCount ?? existing.noteCount,
+      updatedAt: args.lastTouchedAt ?? Date.now(),
     });
 
     return null;
@@ -475,6 +543,8 @@ export const addNote = mutation({
     authUserId: v.string(),
     repoFullName: v.string(),
     body: v.string(),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -488,7 +558,8 @@ export const addNote = mutation({
       authUserId: args.authUserId,
       repoId: repo._id,
       body: args.body,
-      createdAt: Date.now(),
+      createdAt: args.createdAt ?? Date.now(),
+      updatedAt: args.updatedAt ?? args.createdAt ?? Date.now(),
     });
 
     const state = await ctx.db
@@ -501,17 +572,124 @@ export const addNote = mutation({
     if (state) {
       await ctx.db.patch(state._id, {
         noteCount: state.noteCount + 1,
-        lastTouchedAt: Date.now(),
-        updatedAt: Date.now(),
+        lastTouchedAt: args.updatedAt ?? args.createdAt ?? Date.now(),
+        updatedAt: args.updatedAt ?? args.createdAt ?? Date.now(),
       });
     }
 
-    await ctx.db.insert("portfolioEvents", {
-      authUserId: args.authUserId,
-      repoId: repo._id,
-      type: "note_added",
-      createdAt: Date.now(),
+    return null;
+  },
+});
+
+export const listRepoSnapshotsByFullNames = query({
+  args: {
+    fullNames: v.array(v.string()),
+  },
+  returns: v.array(
+    v.object({
+      repoFullName: v.string(),
+      capturedAt: v.number(),
+      stars: v.number(),
+      forks: v.number(),
+      openIssues: v.number(),
+      pushedAt: v.optional(v.number()),
+      latestReleaseAt: v.optional(v.number()),
+      momentumScore: v.optional(v.number()),
+      neglectScore: v.optional(v.number()),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const repos = await Promise.all(args.fullNames.map((fullName) => findRepoByFullName(ctx, fullName)));
+    const repoIds = repos
+      .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
+      .map((repo) => repo._id);
+    const fullNameByRepoId = new Map(
+      repos
+        .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
+        .map((repo) => [repo._id, repo.fullName])
+    );
+
+    const snapshots = await Promise.all(
+      repoIds.map(async (repoId) => ({
+        repoId,
+        items: await ctx.db
+          .query("repoSnapshots")
+          .withIndex("by_repoId", (q) => q.eq("repoId", repoId))
+          .order("desc")
+          .collect(),
+      }))
+    );
+
+    return snapshots.flatMap(({ repoId, items }) => {
+      const repoFullName = fullNameByRepoId.get(repoId);
+      if (!repoFullName) {
+        return [];
+      }
+
+      return items.map((snapshot) => ({
+        repoFullName,
+        capturedAt: snapshot.capturedAt,
+        stars: snapshot.stars,
+        forks: snapshot.forks,
+        openIssues: snapshot.openIssues,
+        pushedAt: snapshot.pushedAt,
+        latestReleaseAt: snapshot.latestReleaseAt,
+        momentumScore: snapshot.momentumScore,
+        neglectScore: snapshot.neglectScore,
+      }));
     });
+  },
+});
+
+export const saveRepoSnapshots = mutation({
+  args: {
+    snapshots: v.array(
+      v.object({
+        repoFullName: v.string(),
+        capturedAt: v.number(),
+        stars: v.number(),
+        forks: v.number(),
+        openIssues: v.number(),
+        pushedAt: v.optional(v.number()),
+        latestReleaseAt: v.optional(v.number()),
+        momentumScore: v.optional(v.number()),
+        neglectScore: v.optional(v.number()),
+      })
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    for (const snapshot of args.snapshots) {
+      const repo = await findRepoByFullName(ctx, snapshot.repoFullName);
+      if (!repo) {
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("repoSnapshots")
+        .withIndex("by_repoId_capturedAt", (q) =>
+          q.eq("repoId", repo._id).eq("capturedAt", snapshot.capturedAt)
+        )
+        .unique();
+
+      const payload = {
+        repoId: repo._id,
+        capturedAt: snapshot.capturedAt,
+        stars: snapshot.stars,
+        forks: snapshot.forks,
+        openIssues: snapshot.openIssues,
+        pushedAt: snapshot.pushedAt,
+        latestReleaseAt: snapshot.latestReleaseAt,
+        momentumScore: snapshot.momentumScore,
+        neglectScore: snapshot.neglectScore,
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, payload);
+      } else {
+        await ctx.db.insert("repoSnapshots", payload);
+      }
+    }
 
     return null;
   },

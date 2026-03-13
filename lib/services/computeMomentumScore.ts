@@ -1,5 +1,5 @@
-import type { MomentumInput, RepoMomentum } from "@/lib/domain/types";
-import { daysBetween, normalizeRecentness } from "@/lib/domain/utils";
+import type { MomentumInput, RepoMomentum } from "../domain/types";
+import { daysBetween, normalizeRecentness } from "../domain/utils";
 
 export function computeMomentumScore(input: MomentumInput): RepoMomentum {
   const starDelta7d = Math.max(

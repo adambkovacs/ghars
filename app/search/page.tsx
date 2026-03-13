@@ -25,6 +25,7 @@ export default async function SearchPage() {
           : "Import your portfolio first, then search becomes the fastest way back to what you starred."
       }
       badge={search.hasImport ? "Live recall" : "Awaiting first import"}
+      viewerLabel={search.githubLogin ?? session.githubLogin ?? session.user.name ?? session.user.id}
     >
       {!search.hasImport ? (
         <SectionCard

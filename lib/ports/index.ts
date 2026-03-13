@@ -7,7 +7,7 @@ import type {
   SearchResult,
   UserNote,
   UserRepoState,
-} from "@/lib/domain/types";
+} from "../domain/types";
 
 export interface Clock {
   now(): Date;
@@ -57,5 +57,6 @@ export interface SearchIndexStore {
 }
 
 export interface ReportSnapshotStore {
-  save(report: ReportSnapshot): Promise<void>;
+  save(userId: string, report: ReportSnapshot): Promise<void>;
+  listByUser(userId: string): Promise<ReportSnapshot[]>;
 }

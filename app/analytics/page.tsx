@@ -5,6 +5,7 @@ import { AppChrome } from "@/components/layout/app-chrome";
 import { SectionCard } from "@/components/layout/section-card";
 import { ConstellationPreview } from "@/components/charts/constellation-preview";
 import { DriftChart } from "@/components/charts/drift-chart";
+import { Sparkline } from "@/components/charts/sparkline";
 import { getPortfolioRuntime } from "@/lib/server/portfolio/runtime";
 
 export default async function AnalyticsPage() {
@@ -26,6 +27,7 @@ export default async function AnalyticsPage() {
           : "Import your stars first, then the analytics surfaces will render from your own portfolio."
       }
       badge={analytics.hasImport ? "Live imported analytics" : "Awaiting first import"}
+      viewerLabel={analytics.githubLogin ?? session.githubLogin ?? session.user.name ?? session.user.id}
     >
       {!analytics.hasImport ? (
         <SectionCard
@@ -72,7 +74,7 @@ export default async function AnalyticsPage() {
           <SectionCard
             eyebrow="Heat matrix"
             title="Momentum by repo"
-            description="A live ranking built from recent user touch plus upstream recency. Historical deltas stay zero until snapshot refresh is wired."
+            description="A live ranking built from recent user touch, upstream movement, and stored portfolio snapshots."
           >
             <div className="grid gap-4 xl:grid-cols-2">
               {analytics.topRepos.map((repo) => (
@@ -103,6 +105,20 @@ export default async function AnalyticsPage() {
                     <div className="rounded-[1.4rem] border border-white/8 bg-slate-950/45 px-3 py-3 text-sm text-slate-200/85">
                       <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Last pushed</p>
                       <p className="mt-2">{repo.pushedAt ? repo.pushedAt.toLocaleDateString("en-US") : "Unknown"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-[1fr_220px]">
+                    <div className="rounded-[1.4rem] border border-white/8 bg-slate-950/45 p-3">
+                      <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Snapshot trend</p>
+                      <div className="mt-3 h-20">
+                        <Sparkline values={repo.trend.length > 0 ? repo.trend : [repo.stars]} />
+                      </div>
+                    </div>
+                    <div className="rounded-[1.4rem] border border-white/8 bg-slate-950/45 px-3 py-3 text-sm text-slate-200/85">
+                      <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Deltas</p>
+                      <p className="mt-2">Stars +{repo.starDelta7d}</p>
+                      <p className="mt-1">Forks +{repo.forkDelta30d}</p>
+                      <p className="mt-1">{repo.trend.length} points</p>
                     </div>
                   </div>
                 </article>

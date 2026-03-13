@@ -159,7 +159,17 @@ export class InMemoryAiGateway implements AiGateway {
 export class InMemoryReportSnapshotStore implements ReportSnapshotStore {
   public readonly reports: ReportSnapshot[] = [];
 
-  async save(report: ReportSnapshot): Promise<void> {
+  async save(_userId: string, report: ReportSnapshot): Promise<void> {
+    const existingIndex = this.reports.findIndex((candidate) => candidate.period === report.period);
+    if (existingIndex >= 0) {
+      this.reports[existingIndex] = report;
+      return;
+    }
+
     this.reports.push(report);
+  }
+
+  async listByUser(): Promise<ReportSnapshot[]> {
+    return [...this.reports];
   }
 }

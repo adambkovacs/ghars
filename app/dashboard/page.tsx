@@ -27,6 +27,7 @@ export default async function DashboardPage() {
       title="Your GitHub stars as a living portfolio"
       subtitle="This surface is now driven by the signed-in user context. Import your stars, then use the rest of the product against real portfolio data instead of demo fixtures."
       badge={badge}
+      viewerLabel={dashboard.githubLogin ?? session.githubLogin ?? session.user.name ?? session.user.id}
     >
       {!dashboard.hasImport ? (
         <SectionCard

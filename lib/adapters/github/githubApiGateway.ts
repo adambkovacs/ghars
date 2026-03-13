@@ -1,5 +1,5 @@
-import type { GitHubGateway } from "@/lib/ports";
-import type { GitHubStarPage, RepoCatalog } from "@/lib/domain/types";
+import type { GitHubGateway } from "../../ports";
+import type { GitHubStarPage, RepoCatalog } from "../../domain/types";
 
 const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
 const GITHUB_REST_URL = "https://api.github.com";
@@ -60,7 +60,6 @@ export class GitHubApiGateway implements GitHubGateway {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query, variables: { cursor: cursor ?? null } }),
-      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -145,7 +144,6 @@ export class GitHubApiGateway implements GitHubGateway {
         Authorization: `Bearer ${this.accessToken}`,
         Accept: "application/vnd.github+json",
       },
-      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -199,7 +197,6 @@ export class GitHubApiGateway implements GitHubGateway {
         Authorization: `Bearer ${this.accessToken}`,
         Accept: "application/vnd.github+json",
       },
-      cache: "no-store",
     });
 
     if (response.status === 404) {

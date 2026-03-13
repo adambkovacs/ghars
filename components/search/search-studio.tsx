@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Command, Search, Sparkle } from "lucide-react";
+import { changeRepoStateAction } from "@/app/repo/[owner]/[name]/actions";
+import { RepoStateForm } from "@/components/repo/repo-state-form";
 import type { RepoCatalog, SearchFilters, UserNote, UserRepoState } from "@/lib/domain/types";
 import type { PortfolioSearchChip, PortfolioSearchSavedView } from "@/lib/server/portfolio/runtime";
 import { searchPortfolio } from "@/lib/services/searchPortfolio";
@@ -149,9 +151,8 @@ export function SearchStudio({
               const latestNote = result.notes[0]?.content ?? "No personal notes yet. This card is currently driven by imported repo facts plus your saved state.";
 
               return (
-                <Link
+                <article
                   key={result.repo.fullName}
-                  href={`/repo/${result.repo.owner}/${result.repo.name}`}
                   className="glass-panel rounded-[2rem] border border-white/10 p-5 transition hover:border-cyan-300/30 hover:bg-white/[0.05]"
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -159,12 +160,20 @@ export function SearchStudio({
                       <p className="text-[0.7rem] uppercase tracking-[0.26em] text-cyan-100/65">
                         {result.reasons.join(" · ")}
                       </p>
-                      <h3 className="mt-1 text-xl font-semibold text-white">{result.repo.fullName}</h3>
+                      <Link
+                        href={`/repo/${result.repo.owner}/${result.repo.name}`}
+                        className="mt-1 inline-block text-xl font-semibold text-white hover:text-cyan-100"
+                      >
+                        {result.repo.fullName}
+                      </Link>
                       <p className="mt-2 text-sm text-slate-300/80">{result.repo.description}</p>
                     </div>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.18em] text-amber-100/80">
-                      {result.state.state}
-                    </span>
+                    <RepoStateForm
+                      repoFullName={result.repo.fullName}
+                      currentState={result.state.state}
+                      compact
+                      action={changeRepoStateAction}
+                    />
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -196,7 +205,7 @@ export function SearchStudio({
                       </p>
                     </div>
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

@@ -11,16 +11,22 @@ This is the short-term execution queue. The canonical longer-horizon status live
    - user imports starred repos
    - imported dashboard data renders for that user only
    - note: the live backend path is already verified against a real 439-star portfolio
-2. Tighten the authenticated app chrome so signed-in users do not see generic sign-in CTAs
-3. Add live note and state editing to repo detail and search-driven workflows
-4. Wire snapshot-backed momentum history so analytics and reports stop relying on recency-only heat
+2. Expose scheduled-refresh health and freshness more clearly in the UI:
+   - show priority-refresh vs full-refresh timing
+   - surface last cron-driven snapshot activity
+   - make it obvious when dashboard data is fresh vs stale
+3. Deepen analytics drill-downs beyond the current ranking cards:
+   - clickable momentum explanations
+   - cluster drill-down from the constellation/analytics surface
+   - per-repo historical snapshot inspection from analytics
+4. Add true note editing and deletion for existing notes, not just note creation
 
 ## Next
 
-1. Extend scheduled refresh integration so momentum and neglect data stay current in live views
-2. Persist generated reports as actual report snapshots instead of on-read generation
-3. Add dedicated analytics drill-down interactions beyond the current imported ranking cards
-4. Improve cluster narratives and constellation depth with real snapshot data
+1. Improve cluster narratives and constellation depth with real snapshot data
+2. Add export surfaces for report snapshots and portfolio summaries
+3. Add richer dashboard drill-downs for neglected repos, state buckets, and recent movement
+4. Persist and expose cluster artifacts if the live constellation/reporting layer needs durable cluster history
 
 ## Later
 

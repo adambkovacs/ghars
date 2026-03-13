@@ -20,7 +20,7 @@ export default async function ReportsPage() {
       title="Live generated portfolio reviews"
       subtitle={
         reports.hasImport
-          ? `Generated from your imported portfolio${reports.githubLogin ? ` for ${reports.githubLogin}` : ""}. Stored report persistence can come later.`
+          ? `Generated and persisted from your imported portfolio${reports.githubLogin ? ` for ${reports.githubLogin}` : ""}.`
           : "Import your stars first so reports can summarize your actual portfolio instead of demo fixtures."
       }
       badge={
@@ -30,6 +30,7 @@ export default async function ReportsPage() {
             : "Live portfolio review"
           : "Awaiting first import"
       }
+      viewerLabel={reports.githubLogin ?? session.githubLogin ?? session.user.name ?? session.user.id}
     >
       {!reports.hasImport ? (
         <SectionCard

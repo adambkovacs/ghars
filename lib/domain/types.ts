@@ -79,6 +79,8 @@ export interface RepoSnapshotDaily {
   pushedAt?: Date | null;
   archived: boolean;
   lastReleaseAt?: Date | null;
+  momentumScore?: number | null;
+  neglectScore?: number | null;
 }
 
 export interface RepoCluster {

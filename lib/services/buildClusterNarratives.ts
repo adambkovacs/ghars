@@ -1,6 +1,6 @@
-import type { AiGateway } from "@/lib/ports";
-import type { ClusterNarrative, RepoCatalog, RepoCluster } from "@/lib/domain/types";
-import { unique } from "@/lib/domain/utils";
+import type { AiGateway } from "../ports";
+import type { ClusterNarrative, RepoCatalog, RepoCluster } from "../domain/types";
+import { unique } from "../domain/utils";
 
 export async function buildClusterNarratives(input: {
   clusters: RepoCluster[];

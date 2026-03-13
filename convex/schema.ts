@@ -80,6 +80,7 @@ export default defineSchema({
     repoId: v.id("repoCatalog"),
     body: v.string(),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_authUserId_repoId", ["authUserId", "repoId"])
     .searchIndex("search_body", {
@@ -140,7 +141,18 @@ export default defineSchema({
     title: v.string(),
     summary: v.string(),
     highlights: v.array(v.string()),
-    topRepoIds: v.array(v.id("repoCatalog")),
+    topRepoIds: v.array(v.string()),
+    sections: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          title: v.string(),
+          summary: v.string(),
+          evidenceRepoIds: v.array(v.string()),
+        })
+      )
+    ),
+    syncCapturedAt: v.optional(v.number()),
     generatedAt: v.number(),
   })
     .index("by_authUserId", ["authUserId"])

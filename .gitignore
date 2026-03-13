@@ -47,6 +47,9 @@ next-env.d.ts
 /convex/_generated
 /convex/*.js
 /convex/*.js.map
+/lib/adapters/github/githubApiGateway.js
+/lib/domain/types.js
+/lib/server/portfolio/artifacts.js
 
 # clerk configuration (can include secrets)
 /.clerk/

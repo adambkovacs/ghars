@@ -9,7 +9,8 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowJs": false
+    "allowJs": false,
+    "noEmit": true
   },
   "include": ["./**/*"]
 }

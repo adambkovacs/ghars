@@ -1,35 +1,56 @@
+"use client";
+
 type SparklineProps = {
-  points: number[];
+  values?: number[];
+  points?: number[];
+  className?: string;
   stroke?: string;
-  fill?: string;
-  height?: number;
 };
 
 export function Sparkline({
+  values,
   points,
-  stroke = "#67e8f9",
-  fill = "rgba(103, 232, 249, 0.14)",
-  height = 88,
+  className,
+  stroke = "rgba(103,232,249,0.95)",
 }: SparklineProps) {
-  const width = 280;
-  const max = Math.max(...points);
-  const min = Math.min(...points);
-  const range = Math.max(max - min, 1);
+  const series = points ?? values ?? [];
 
-  const path = points
-    .map((point, index) => {
-      const x = (index / Math.max(points.length - 1, 1)) * width;
-      const y = height - ((point - min) / range) * (height - 12) - 6;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
+  if (series.length === 0) {
+    return (
+      <div className={className}>
+        <div className="h-16 rounded-[1.2rem] border border-dashed border-white/10 bg-white/[0.02]" />
+      </div>
+    );
+  }
 
-  const area = `${path} L ${width} ${height} L 0 ${height} Z`;
+  const width = 240;
+  const height = 72;
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = Math.max(1, max - min);
+
+  const polylinePoints = series.map((value, index) => {
+    const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
+    const y = height - ((value - min) / range) * (height - 8) - 4;
+    return `${x},${y}`;
+  });
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
-      <path d={area} fill={fill} />
-      <path d={path} fill="none" stroke={stroke} strokeWidth={2.4} strokeLinecap="round" />
-    </svg>
+    <div className={className}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-16 w-full overflow-visible"
+        aria-hidden="true"
+      >
+        <polyline
+          fill="none"
+          stroke={stroke}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={polylinePoints.join(" ")}
+        />
+      </svg>
+    </div>
   );
 }

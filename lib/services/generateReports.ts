@@ -6,7 +6,7 @@ import type {
   RepoMomentum,
   ReportPeriod,
   ReportSnapshot,
-} from "@/lib/domain/types";
+} from "../domain/types";
 
 export function generateReport(input: {
   id: string;

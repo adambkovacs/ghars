@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+import { promises as fs, rmSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 import type {
@@ -5,30 +8,42 @@ import type {
   OverviewMetrics,
   PortfolioEvent,
   RepoCatalog,
+  RepoSnapshotDaily,
+  RepoState,
   ReportPeriod,
+  ReportSnapshot,
   SearchFilters,
   UserNote,
   UserRepoState,
 } from "@/lib/domain/types";
-import { demoRepositories, demoStates } from "@/lib/demo/portfolio";
+import { demoRepositories, demoSnapshots, demoStates } from "@/lib/demo/portfolio";
 import { appEnv } from "@/lib/env/app-env";
 import type {
   Clock,
   PortfolioEventStore,
   RepoCatalogStore,
+  ReportSnapshotStore,
+  SnapshotStore,
   UserNoteStore,
   UserRepoStateStore,
 } from "@/lib/ports";
 import {
-  buildClusterNarratives,
   buildOverviewMetrics,
   buildTemporalDrift,
   computeMomentumScore,
+  createAddUserNoteService,
+  createChangeRepoStateService,
   createImportStarredReposService,
-  generateNeglectSignals,
-  generateReport,
 } from "@/lib/services";
 import { GitHubApiGateway } from "@/lib/adapters/github/githubApiGateway";
+import {
+  buildDerivedArtifacts,
+  buildRuntimeRepoClusters,
+  buildSnapshotMap,
+  deriveUserTouchCount14d,
+} from "@/lib/server/portfolio/artifacts";
+
+const TEST_RUNTIME_STATE_DIR = path.join(os.tmpdir(), "ghars-e2e-runtime");
 
 type DashboardRepo = {
   fullName: string;
@@ -79,6 +94,7 @@ export type PortfolioRepoDetailModel = {
   repo: RepoCatalog | null;
   state: UserRepoState | null;
   notes: UserNote[];
+  starHistory: { capturedAt: Date; stars: number; momentumScore: number | null }[];
 };
 
 export type PortfolioAnalyticsCluster = {
@@ -103,6 +119,9 @@ export type PortfolioAnalyticsRepo = {
   lastTouchedAt: Date | null;
   pushedAt: Date | null | undefined;
   momentumScore: number;
+  starDelta7d: number;
+  forkDelta30d: number;
+  trend: number[];
   reasons: string[];
 };
 
@@ -144,8 +163,22 @@ type ImportRequest = {
   accessToken: string;
 };
 
+type AddNoteRequest = {
+  userId: string;
+  repoFullName: string;
+  content: string;
+};
+
+type ChangeStateRequest = {
+  userId: string;
+  repoFullName: string;
+  nextState: RepoState;
+};
+
 type PortfolioRuntime = {
   importPortfolio(request: ImportRequest): Promise<{ imported: number; completedAt: Date }>;
+  addNote(request: AddNoteRequest): Promise<UserNote>;
+  changeRepoState(request: ChangeStateRequest): Promise<UserRepoState>;
   getDashboardModel(userId: string): Promise<PortfolioDashboardModel>;
   getSearchModel(userId: string): Promise<PortfolioSearchModel>;
   getRepoDetailModel(userId: string, owner: string, name: string): Promise<PortfolioRepoDetailModel>;
@@ -234,6 +267,51 @@ class InMemoryPortfolioEventStore implements PortfolioEventStore {
 
   async listByUser(userId: string) {
     return this.events.filter((event) => event.userId === userId);
+  }
+}
+
+class InMemorySnapshotStore implements SnapshotStore {
+  constructor(private readonly snapshots: RepoSnapshotDaily[] = []) {}
+
+  async listLatest(repoIds: string[]) {
+    return this.snapshots
+      .filter((snapshot) => repoIds.includes(snapshot.repoId))
+      .sort((left, right) => right.snapshotDate.getTime() - left.snapshotDate.getTime());
+  }
+
+  async saveMany(snapshots: RepoSnapshotDaily[]) {
+    for (const snapshot of snapshots) {
+      const existingIndex = this.snapshots.findIndex(
+        (candidate) =>
+          candidate.repoId === snapshot.repoId &&
+          candidate.snapshotDate.getTime() === snapshot.snapshotDate.getTime()
+      );
+
+      if (existingIndex >= 0) {
+        this.snapshots[existingIndex] = snapshot;
+      } else {
+        this.snapshots.push(snapshot);
+      }
+    }
+  }
+}
+
+class InMemoryReportSnapshotStore implements ReportSnapshotStore {
+  constructor(private readonly reports: ReportSnapshot[] = []) {}
+
+  async save(_userId: string, report: ReportSnapshot) {
+    const existingIndex = this.reports.findIndex((candidate) => candidate.period === report.period);
+    if (existingIndex >= 0) {
+      this.reports[existingIndex] = report;
+      return;
+    }
+
+    this.reports.push(report);
+  }
+
+  async listByUser(_userId: string) {
+    void _userId;
+    return [...this.reports].sort((left, right) => right.generatedAt.getTime() - left.generatedAt.getTime());
   }
 }
 
@@ -340,11 +418,15 @@ class ConvexUserRepoStateStore implements UserRepoStateStore {
   }
 
   async save(state: UserRepoState) {
-    await this.upsertStarEdges(state.userId, [{ repo: { fullName: state.repoId } as RepoCatalog, starredAt: state.starredAt }], state.lastTouchedAt ?? state.starredAt);
     await this.client.mutation(api.portfolio.changeRepoState, {
       authUserId: state.userId,
       repoFullName: state.repoId,
       state: state.state,
+      starredAt: state.starredAt.getTime(),
+      lastViewedAt: state.lastViewedAt?.getTime() ?? undefined,
+      lastTouchedAt: state.lastTouchedAt?.getTime() ?? state.starredAt.getTime(),
+      tags: state.tags,
+      noteCount: state.noteCount,
     });
   }
 }
@@ -357,6 +439,8 @@ class ConvexUserNoteStore implements UserNoteStore {
       authUserId: note.userId,
       repoFullName: note.repoId,
       body: note.content,
+      createdAt: note.createdAt.getTime(),
+      updatedAt: note.updatedAt.getTime(),
     });
   }
 
@@ -397,15 +481,299 @@ class ConvexPortfolioEventStore implements PortfolioEventStore {
         repoFullName:
           typeof event.payload?.fullName === "string"
             ? event.payload.fullName
-            : undefined,
+            : event.repoId,
         payload: event.payload,
       })),
     });
   }
 
-  async listByUser() {
-    return [];
+  async listByUser(userId: string) {
+    const events = await this.client.query(api.portfolio.listPortfolioEvents, {
+      authUserId: userId,
+    });
+
+    return events
+      .filter((event) => event.repoFullName)
+      .map((event) => ({
+        id: event.id,
+        userId,
+        repoId: event.repoFullName!.toLowerCase(),
+        type: event.type,
+        occurredAt: new Date(event.createdAt),
+        payload:
+          event.metadata && typeof event.metadata === "object"
+            ? (event.metadata as Record<string, unknown>)
+            : undefined,
+      }));
   }
+}
+
+class ConvexSnapshotStore implements SnapshotStore {
+  constructor(private readonly client: ConvexHttpClient) {}
+
+  async listLatest(repoIds: string[]) {
+    if (repoIds.length === 0) {
+      return [];
+    }
+
+    const snapshots = await this.client.query(api.portfolio.listRepoSnapshotsByFullNames, {
+      fullNames: repoIds,
+    });
+
+    return snapshots
+      .filter((snapshot) => repoIds.includes(snapshot.repoFullName.toLowerCase()))
+      .map((snapshot) => ({
+        repoId: snapshot.repoFullName.toLowerCase(),
+        snapshotDate: new Date(snapshot.capturedAt),
+        stargazersCount: snapshot.stars,
+        forksCount: snapshot.forks,
+        openIssuesCount: snapshot.openIssues,
+        pushedAt: snapshot.pushedAt ? new Date(snapshot.pushedAt) : null,
+        archived: false,
+        lastReleaseAt: snapshot.latestReleaseAt ? new Date(snapshot.latestReleaseAt) : null,
+        momentumScore: snapshot.momentumScore ?? null,
+        neglectScore: snapshot.neglectScore ?? null,
+      }))
+      .sort((left, right) => right.snapshotDate.getTime() - left.snapshotDate.getTime());
+  }
+
+  async saveMany(snapshots: RepoSnapshotDaily[]) {
+    if (snapshots.length === 0) {
+      return;
+    }
+
+    await this.client.mutation(api.portfolio.saveRepoSnapshots, {
+      snapshots: snapshots.map((snapshot) => ({
+        repoFullName: snapshot.repoId,
+        capturedAt: snapshot.snapshotDate.getTime(),
+        stars: snapshot.stargazersCount,
+        forks: snapshot.forksCount,
+        openIssues: snapshot.openIssuesCount,
+        pushedAt: snapshot.pushedAt?.getTime() ?? undefined,
+        latestReleaseAt: snapshot.lastReleaseAt?.getTime() ?? undefined,
+        momentumScore: snapshot.momentumScore ?? undefined,
+        neglectScore: snapshot.neglectScore ?? undefined,
+      })),
+    });
+  }
+}
+
+class ConvexReportSnapshotStore implements ReportSnapshotStore {
+  constructor(private readonly client: ConvexHttpClient) {}
+
+  async save(userId: string, report: ReportSnapshot) {
+    await this.client.mutation(api.reports.storeReport, {
+      authUserId: userId,
+      period: report.period,
+      title: report.period === "weekly" ? "Weekly live portfolio review" : "Monthly live portfolio review",
+      summary: report.summary,
+      highlights: report.sections.map((section) => section.summary).slice(0, 4),
+      topRepoIds: report.sections.flatMap((section) => section.evidenceRepoIds).slice(0, 8),
+      sections: report.sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        summary: section.summary,
+        evidenceRepoIds: section.evidenceRepoIds,
+      })),
+      syncCapturedAt: report.generatedAt.getTime(),
+    });
+  }
+
+  async listByUser(userId: string) {
+    const reports = await this.client.query(api.reports.listReports, {
+      authUserId: userId,
+    });
+
+    return reports.map((report) => ({
+      id: report._id,
+      period: report.period,
+      generatedAt: new Date(report.generatedAt),
+      summary: report.summary,
+      sections: report.sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        summary: section.summary,
+        evidenceRepoIds: [...section.evidenceRepoIds],
+      })),
+    }));
+  }
+}
+
+async function persistDerivedArtifacts(input: {
+  userId: string;
+  githubLogin: string | null;
+  lastSyncedAt: Date | null;
+  repositories: RepoCatalog[];
+  states: UserRepoState[];
+  notes: UserNote[];
+  events: PortfolioEvent[];
+  snapshotStore: SnapshotStore;
+  reportStore: ReportSnapshotStore;
+}) {
+  const existingSnapshots = await input.snapshotStore.listLatest(input.repositories.map((repo) => repo.id));
+  const { snapshots, reports } = await buildDerivedArtifacts({
+    userId: input.userId,
+    githubLogin: input.githubLogin,
+    lastSyncedAt: input.lastSyncedAt,
+    repositories: input.repositories,
+    states: input.states,
+    notes: input.notes,
+    events: input.events,
+    existingSnapshots,
+  });
+
+  await input.snapshotStore.saveMany(snapshots);
+  for (const report of reports) {
+    await input.reportStore.save(input.userId, report);
+  }
+}
+
+function getTestRuntimeStatePath(userId: string) {
+  return path.join(TEST_RUNTIME_STATE_DIR, `${userId}.json`);
+}
+
+async function hydrateTestRuntimeState(
+  runtime: {
+    repoCatalogStore: InMemoryRepoCatalogStore;
+    userRepoStateStore: InMemoryUserRepoStateStore;
+    userNoteStore: InMemoryUserNoteStore;
+    eventStore: InMemoryPortfolioEventStore;
+    snapshotStore: InMemorySnapshotStore;
+    reportStore: InMemoryReportSnapshotStore;
+    connectionByUserId: Map<string, { githubLogin: string; lastSyncedAt: Date }>;
+  },
+  userId: string
+) {
+  if ((await runtime.userRepoStateStore.listByUser(userId)).length > 0) {
+    return;
+  }
+
+  try {
+    const raw = await fs.readFile(getTestRuntimeStatePath(userId), "utf8");
+    const persisted = JSON.parse(raw) as {
+      connection?: { githubLogin: string; lastSyncedAt: string };
+      repositories: RepoCatalog[];
+      states: Array<Omit<UserRepoState, "starredAt" | "lastTouchedAt" | "lastViewedAt"> & { starredAt: string; lastTouchedAt?: string | null; lastViewedAt?: string | null }>;
+      notes: Array<Omit<UserNote, "createdAt" | "updatedAt"> & { createdAt: string; updatedAt: string }>;
+      events: Array<Omit<PortfolioEvent, "occurredAt"> & { occurredAt: string }>;
+      snapshots: Array<Omit<RepoSnapshotDaily, "snapshotDate" | "pushedAt" | "lastReleaseAt"> & { snapshotDate: string; pushedAt?: string | null; lastReleaseAt?: string | null }>;
+      reports: Array<Omit<ReportSnapshot, "generatedAt"> & { generatedAt: string }>;
+    };
+
+    await runtime.repoCatalogStore.upsertMany(persisted.repositories);
+    for (const state of persisted.states) {
+      await runtime.userRepoStateStore.save({
+        ...state,
+        starredAt: new Date(state.starredAt),
+        lastTouchedAt: state.lastTouchedAt ? new Date(state.lastTouchedAt) : null,
+        lastViewedAt: state.lastViewedAt ? new Date(state.lastViewedAt) : null,
+      });
+    }
+    for (const note of persisted.notes) {
+      await runtime.userNoteStore.create({
+        ...note,
+        createdAt: new Date(note.createdAt),
+        updatedAt: new Date(note.updatedAt),
+      });
+    }
+    await runtime.eventStore.append(
+      persisted.events.map((event) => ({
+        ...event,
+        occurredAt: new Date(event.occurredAt),
+      }))
+    );
+    await runtime.snapshotStore.saveMany(
+      persisted.snapshots.map((snapshot) => ({
+        ...snapshot,
+        snapshotDate: new Date(snapshot.snapshotDate),
+        pushedAt: snapshot.pushedAt ? new Date(snapshot.pushedAt) : null,
+        lastReleaseAt: snapshot.lastReleaseAt ? new Date(snapshot.lastReleaseAt) : null,
+      }))
+    );
+    for (const report of persisted.reports) {
+      await runtime.reportStore.save(userId, {
+        ...report,
+        generatedAt: new Date(report.generatedAt),
+      });
+    }
+
+    if (persisted.connection) {
+      runtime.connectionByUserId.set(userId, {
+        githubLogin: persisted.connection.githubLogin,
+        lastSyncedAt: new Date(persisted.connection.lastSyncedAt),
+      });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+async function persistTestRuntimeState(
+  runtime: {
+    repoCatalogStore: InMemoryRepoCatalogStore;
+    userRepoStateStore: InMemoryUserRepoStateStore;
+    userNoteStore: InMemoryUserNoteStore;
+    eventStore: InMemoryPortfolioEventStore;
+    snapshotStore: InMemorySnapshotStore;
+    reportStore: InMemoryReportSnapshotStore;
+    connectionByUserId: Map<string, { githubLogin: string; lastSyncedAt: Date }>;
+  },
+  userId: string
+) {
+  await fs.mkdir(TEST_RUNTIME_STATE_DIR, { recursive: true });
+
+  const states = await runtime.userRepoStateStore.listByUser(userId);
+  const repositories = await runtime.repoCatalogStore.listByIds(states.map((state) => state.repoId));
+  const notes = await runtime.userNoteStore.listByUser(userId);
+  const events = await runtime.eventStore.listByUser(userId);
+  const snapshots = await runtime.snapshotStore.listLatest(states.map((state) => state.repoId));
+  const reports = await runtime.reportStore.listByUser(userId);
+  const connection = runtime.connectionByUserId.get(userId);
+
+  await fs.writeFile(
+    getTestRuntimeStatePath(userId),
+    JSON.stringify(
+      {
+        connection: connection
+          ? {
+              githubLogin: connection.githubLogin,
+              lastSyncedAt: connection.lastSyncedAt.toISOString(),
+            }
+          : null,
+        repositories,
+        states: states.map((state) => ({
+          ...state,
+          starredAt: state.starredAt.toISOString(),
+          lastTouchedAt: state.lastTouchedAt?.toISOString() ?? null,
+          lastViewedAt: state.lastViewedAt?.toISOString() ?? null,
+        })),
+        notes: notes.map((note) => ({
+          ...note,
+          createdAt: note.createdAt.toISOString(),
+          updatedAt: note.updatedAt.toISOString(),
+        })),
+        events: events.map((event) => ({
+          ...event,
+          occurredAt: event.occurredAt.toISOString(),
+        })),
+        snapshots: snapshots.map((snapshot) => ({
+          ...snapshot,
+          snapshotDate: snapshot.snapshotDate.toISOString(),
+          pushedAt: snapshot.pushedAt?.toISOString() ?? null,
+          lastReleaseAt: snapshot.lastReleaseAt?.toISOString() ?? null,
+        })),
+        reports: reports.map((report) => ({
+          ...report,
+          generatedAt: report.generatedAt.toISOString(),
+        })),
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
 }
 
 function getTestRuntime(): PortfolioRuntime {
@@ -415,6 +783,8 @@ function getTestRuntime(): PortfolioRuntime {
       userRepoStateStore: InMemoryUserRepoStateStore;
       userNoteStore: InMemoryUserNoteStore;
       eventStore: InMemoryPortfolioEventStore;
+      snapshotStore: InMemorySnapshotStore;
+      reportStore: InMemoryReportSnapshotStore;
       connectionByUserId: Map<string, { githubLogin: string; lastSyncedAt: Date }>;
     };
   };
@@ -426,6 +796,8 @@ function getTestRuntime(): PortfolioRuntime {
       userRepoStateStore: new InMemoryUserRepoStateStore(),
       userNoteStore: new InMemoryUserNoteStore(),
       eventStore: new InMemoryPortfolioEventStore(),
+      snapshotStore: new InMemorySnapshotStore([...demoSnapshots]),
+      reportStore: new InMemoryReportSnapshotStore(),
       connectionByUserId: new Map<string, { githubLogin: string; lastSyncedAt: Date }>(),
     };
 
@@ -433,6 +805,7 @@ function getTestRuntime(): PortfolioRuntime {
 
   return {
     async importPortfolio(request) {
+      await hydrateTestRuntimeState(runtime, request.userId);
       const stateByRepoId = new Map(demoStates.map((state) => [state.repoId, state.starredAt]));
       const service = createImportStarredReposService({
         github: {
@@ -468,9 +841,116 @@ function getTestRuntime(): PortfolioRuntime {
         githubLogin: request.githubLogin,
         lastSyncedAt: result.completedAt,
       });
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: request.githubLogin,
+        lastSyncedAt: result.completedAt,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await runtime.eventStore.listByUser(request.userId),
+        snapshotStore: runtime.snapshotStore,
+        reportStore: runtime.reportStore,
+      });
+      await persistTestRuntimeState(runtime, request.userId);
       return result;
     },
+    async addNote(request) {
+      await hydrateTestRuntimeState(runtime, request.userId);
+      const existingPortfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      const repoId =
+        existingPortfolio.repositories.find(
+          (repo) => repo.fullName.toLowerCase() === request.repoFullName.toLowerCase()
+        )?.id ?? request.repoFullName.toLowerCase();
+      const note = await createAddUserNoteService({
+        noteStore: runtime.userNoteStore,
+        stateStore: runtime.userRepoStateStore,
+        eventStore: runtime.eventStore,
+        clock: new SystemClock(),
+      })({
+        noteId: crypto.randomUUID(),
+        userId: request.userId,
+        repoId,
+        content: request.content,
+      });
+
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: runtime.connectionByUserId.get(request.userId)?.githubLogin ?? null,
+        lastSyncedAt: runtime.connectionByUserId.get(request.userId)?.lastSyncedAt ?? null,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await runtime.eventStore.listByUser(request.userId),
+        snapshotStore: runtime.snapshotStore,
+        reportStore: runtime.reportStore,
+      });
+      await persistTestRuntimeState(runtime, request.userId);
+
+      return note;
+    },
+    async changeRepoState(request) {
+      await hydrateTestRuntimeState(runtime, request.userId);
+      const existingPortfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      const repoId =
+        existingPortfolio.repositories.find(
+          (repo) => repo.fullName.toLowerCase() === request.repoFullName.toLowerCase()
+        )?.id ?? request.repoFullName.toLowerCase();
+      const state = await createChangeRepoStateService({
+        stateStore: runtime.userRepoStateStore,
+        eventStore: runtime.eventStore,
+        clock: new SystemClock(),
+      })({
+        userId: request.userId,
+        repoId,
+        nextState: request.nextState,
+      });
+
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore: runtime.repoCatalogStore,
+        userRepoStateStore: runtime.userRepoStateStore,
+        userNoteStore: runtime.userNoteStore,
+      });
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: runtime.connectionByUserId.get(request.userId)?.githubLogin ?? null,
+        lastSyncedAt: runtime.connectionByUserId.get(request.userId)?.lastSyncedAt ?? null,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await runtime.eventStore.listByUser(request.userId),
+        snapshotStore: runtime.snapshotStore,
+        reportStore: runtime.reportStore,
+      });
+      await persistTestRuntimeState(runtime, request.userId);
+
+      return state;
+    },
     async getDashboardModel(userId) {
+      await hydrateTestRuntimeState(runtime, userId);
       const { repositories, states, notes } = await loadPortfolioData({
         userId,
         repoCatalogStore: runtime.repoCatalogStore,
@@ -486,6 +966,7 @@ function getTestRuntime(): PortfolioRuntime {
       });
     },
     async getSearchModel(userId) {
+      await hydrateTestRuntimeState(runtime, userId);
       const { repositories, states, notes } = await loadPortfolioData({
         userId,
         repoCatalogStore: runtime.repoCatalogStore,
@@ -500,48 +981,58 @@ function getTestRuntime(): PortfolioRuntime {
       });
     },
     async getRepoDetailModel(userId, owner, name) {
+      await hydrateTestRuntimeState(runtime, userId);
       const { repositories, states, notes } = await loadPortfolioData({
         userId,
         repoCatalogStore: runtime.repoCatalogStore,
         userRepoStateStore: runtime.userRepoStateStore,
         userNoteStore: runtime.userNoteStore,
       });
+      const snapshots = await runtime.snapshotStore.listLatest(states.map((state) => state.repoId));
       return buildRepoDetailModel({
         owner,
         name,
         repositories,
         states,
         notes,
+        snapshots,
         githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
       });
     },
     async getAnalyticsModel(userId) {
+      await hydrateTestRuntimeState(runtime, userId);
       const { repositories, states, notes } = await loadPortfolioData({
         userId,
         repoCatalogStore: runtime.repoCatalogStore,
         userRepoStateStore: runtime.userRepoStateStore,
         userNoteStore: runtime.userNoteStore,
       });
+      const events = await runtime.eventStore.listByUser(userId);
+      const snapshots = await runtime.snapshotStore.listLatest(states.map((state) => state.repoId));
       return await buildAnalyticsModel({
         repositories,
         states,
         notes,
+        events,
+        snapshots,
         githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
       });
     },
     async getReportsModel(userId) {
-      const { repositories, states, notes } = await loadPortfolioData({
+      await hydrateTestRuntimeState(runtime, userId);
+      const { repositories, states } = await loadPortfolioData({
         userId,
         repoCatalogStore: runtime.repoCatalogStore,
         userRepoStateStore: runtime.userRepoStateStore,
         userNoteStore: runtime.userNoteStore,
       });
-      return await buildReportsModel({
+      const reports = await runtime.reportStore.listByUser(userId);
+      return buildReportsModel({
         repositories,
-        states,
-        notes,
+        reports,
         githubLogin: runtime.connectionByUserId.get(userId)?.githubLogin ?? null,
         lastSyncedAt: runtime.connectionByUserId.get(userId)?.lastSyncedAt ?? null,
+        hasImport: states.length > 0,
       });
     },
   };
@@ -557,7 +1048,15 @@ function getConvexRuntime(): PortfolioRuntime {
   const userRepoStateStore = new ConvexUserRepoStateStore(client);
   const userNoteStore = new ConvexUserNoteStore(client);
   const eventStore = new ConvexPortfolioEventStore(client);
+  const snapshotStore = new ConvexSnapshotStore(client);
+  const reportStore = new ConvexReportSnapshotStore(client);
   const clock = new SystemClock();
+
+  async function loadConnection(userId: string) {
+    return await client.query(api.portfolio.getGitHubConnection, {
+      authUserId: userId,
+    });
+  }
 
   return {
     async importPortfolio(request) {
@@ -578,7 +1077,106 @@ function getConvexRuntime(): PortfolioRuntime {
         scopes: [],
         lastSyncedAt: result.completedAt.getTime(),
       });
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: request.githubLogin,
+        lastSyncedAt: result.completedAt,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await eventStore.listByUser(request.userId),
+        snapshotStore,
+        reportStore,
+      });
       return result;
+    },
+    async addNote(request) {
+      const existingPortfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const repoId =
+        existingPortfolio.repositories.find(
+          (repo) => repo.fullName.toLowerCase() === request.repoFullName.toLowerCase()
+        )?.id ?? request.repoFullName.toLowerCase();
+      const note = await createAddUserNoteService({
+        noteStore: userNoteStore,
+        stateStore: userRepoStateStore,
+        eventStore,
+        clock,
+      })({
+        noteId: crypto.randomUUID(),
+        userId: request.userId,
+        repoId,
+        content: request.content,
+      });
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const connection = await loadConnection(request.userId);
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: connection?.githubLogin ?? null,
+        lastSyncedAt: connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await eventStore.listByUser(request.userId),
+        snapshotStore,
+        reportStore,
+      });
+      return note;
+    },
+    async changeRepoState(request) {
+      const existingPortfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const repoId =
+        existingPortfolio.repositories.find(
+          (repo) => repo.fullName.toLowerCase() === request.repoFullName.toLowerCase()
+        )?.id ?? request.repoFullName.toLowerCase();
+      const state = await createChangeRepoStateService({
+        stateStore: userRepoStateStore,
+        eventStore,
+        clock,
+      })({
+        userId: request.userId,
+        repoId,
+        nextState: request.nextState,
+      });
+      const portfolio = await loadPortfolioData({
+        userId: request.userId,
+        repoCatalogStore,
+        userRepoStateStore,
+        userNoteStore,
+      });
+      const connection = await loadConnection(request.userId);
+      await persistDerivedArtifacts({
+        userId: request.userId,
+        githubLogin: connection?.githubLogin ?? null,
+        lastSyncedAt: connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null,
+        repositories: portfolio.repositories,
+        states: portfolio.states,
+        notes: portfolio.notes,
+        events: await eventStore.listByUser(request.userId),
+        snapshotStore,
+        reportStore,
+      });
+      return state;
     },
     async getDashboardModel(userId) {
       const { repositories, states, notes } = await loadPortfolioData({
@@ -587,9 +1185,7 @@ function getConvexRuntime(): PortfolioRuntime {
         userRepoStateStore,
         userNoteStore,
       });
-      const connection = await client.query(api.portfolio.getGitHubConnection, {
-        authUserId: userId,
-      });
+      const connection = await loadConnection(userId);
 
       return buildDashboardModel({
         repositories,
@@ -606,9 +1202,7 @@ function getConvexRuntime(): PortfolioRuntime {
         userRepoStateStore,
         userNoteStore,
       });
-      const connection = await client.query(api.portfolio.getGitHubConnection, {
-        authUserId: userId,
-      });
+      const connection = await loadConnection(userId);
 
       return buildSearchModel({
         repositories,
@@ -624,9 +1218,8 @@ function getConvexRuntime(): PortfolioRuntime {
         userRepoStateStore,
         userNoteStore,
       });
-      const connection = await client.query(api.portfolio.getGitHubConnection, {
-        authUserId: userId,
-      });
+      const connection = await loadConnection(userId);
+      const snapshots = await snapshotStore.listLatest(states.map((state) => state.repoId));
 
       return buildRepoDetailModel({
         owner,
@@ -634,6 +1227,7 @@ function getConvexRuntime(): PortfolioRuntime {
         repositories,
         states,
         notes,
+        snapshots,
         githubLogin: connection?.githubLogin ?? null,
       });
     },
@@ -644,34 +1238,35 @@ function getConvexRuntime(): PortfolioRuntime {
         userRepoStateStore,
         userNoteStore,
       });
-      const connection = await client.query(api.portfolio.getGitHubConnection, {
-        authUserId: userId,
-      });
+      const connection = await loadConnection(userId);
+      const events = await eventStore.listByUser(userId);
+      const snapshots = await snapshotStore.listLatest(states.map((state) => state.repoId));
 
       return await buildAnalyticsModel({
         repositories,
         states,
         notes,
+        events,
+        snapshots,
         githubLogin: connection?.githubLogin ?? null,
       });
     },
     async getReportsModel(userId) {
-      const { repositories, states, notes } = await loadPortfolioData({
+      const { repositories, states } = await loadPortfolioData({
         userId,
         repoCatalogStore,
         userRepoStateStore,
         userNoteStore,
       });
-      const connection = await client.query(api.portfolio.getGitHubConnection, {
-        authUserId: userId,
-      });
+      const connection = await loadConnection(userId);
+      const reports = await reportStore.listByUser(userId);
 
-      return await buildReportsModel({
+      return buildReportsModel({
         repositories,
-        states,
-        notes,
+        reports,
         githubLogin: connection?.githubLogin ?? null,
         lastSyncedAt: connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null,
+        hasImport: states.length > 0,
       });
     },
   };
@@ -841,6 +1436,7 @@ function buildRepoDetailModel(input: {
   repositories: RepoCatalog[];
   states: UserRepoState[];
   notes: UserNote[];
+  snapshots: RepoSnapshotDaily[];
   githubLogin: string | null;
 }): PortfolioRepoDetailModel {
   const fullName = `${input.owner}/${input.name}`.toLowerCase();
@@ -849,6 +1445,17 @@ function buildRepoDetailModel(input: {
     ? input.states.find((entry) => entry.repoId === repo.id) ?? null
     : null;
   const notes = repo ? input.notes.filter((entry) => entry.repoId === repo.id) : [];
+  const starHistory = repo
+    ? input.snapshots
+        .filter((snapshot) => snapshot.repoId === repo.id)
+        .sort((left, right) => left.snapshotDate.getTime() - right.snapshotDate.getTime())
+        .slice(-10)
+        .map((snapshot) => ({
+          capturedAt: snapshot.snapshotDate,
+          stars: snapshot.stargazersCount,
+          momentumScore: snapshot.momentumScore ?? null,
+        }))
+    : [];
 
   return {
     hasImport: input.states.length > 0,
@@ -856,15 +1463,18 @@ function buildRepoDetailModel(input: {
     repo,
     state,
     notes,
+    starHistory,
   };
 }
 
-async function buildAnalyticsModel(input: {
+function buildAnalyticsModelSync(input: {
   repositories: RepoCatalog[];
   states: UserRepoState[];
   notes: UserNote[];
+  events: PortfolioEvent[];
+  snapshots: RepoSnapshotDaily[];
   githubLogin: string | null;
-}): Promise<PortfolioAnalyticsModel> {
+}): PortfolioAnalyticsModel {
   const now = new Date();
   const metrics = buildOverviewMetrics({
     now,
@@ -883,6 +1493,7 @@ async function buildAnalyticsModel(input: {
     noteCountByRepoId.set(note.repoId, (noteCountByRepoId.get(note.repoId) ?? 0) + 1);
   }
 
+  const snapshotsByRepoId = buildSnapshotMap(input.snapshots);
   const momentum = input.states
     .flatMap((state) => {
       const repo = repoById.get(state.repoId);
@@ -890,17 +1501,30 @@ async function buildAnalyticsModel(input: {
         return [];
       }
 
-      const lastTouchedAt = state.lastTouchedAt ?? state.starredAt;
-      const daysSinceTouch = Math.max(
-        0,
-        Math.floor((now.getTime() - lastTouchedAt.getTime()) / (1000 * 60 * 60 * 24))
-      );
+      const history = snapshotsByRepoId.get(repo.id) ?? [];
+      const currentSnapshot =
+        history[0] ??
+        ({
+          repoId: repo.id,
+          snapshotDate: now,
+          stargazersCount: repo.stargazerCount,
+          forksCount: repo.forksCount,
+          openIssuesCount: repo.openIssuesCount,
+          pushedAt: repo.pushedAt ?? null,
+          archived: repo.archived,
+          lastReleaseAt: repo.lastReleaseAt ?? null,
+          momentumScore: null,
+          neglectScore: null,
+        } satisfies RepoSnapshotDaily);
+      const previousSnapshot = history[1] ?? null;
 
       return [
         computeMomentumScore({
           repo,
+          currentSnapshot,
+          previousSnapshot,
           now,
-          userTouchCount14d: Math.max(0, 14 - Math.min(14, daysSinceTouch)),
+          userTouchCount14d: deriveUserTouchCount14d(state, now),
         }),
       ];
     })
@@ -929,6 +1553,18 @@ async function buildAnalyticsModel(input: {
         lastTouchedAt: state.lastTouchedAt ?? null,
         pushedAt: repo.pushedAt,
         momentumScore: entry.score,
+        starDelta7d: entry.starDelta7d,
+        forkDelta30d: entry.forkDelta30d,
+        trend: (snapshotsByRepoId.get(repo.id) ?? [])
+          .slice(0, 8)
+          .reverse()
+          .map((snapshot) => snapshot.stargazersCount)
+          .concat(
+            (snapshotsByRepoId.get(repo.id) ?? []).length === 0 ||
+              (snapshotsByRepoId.get(repo.id) ?? [])[0]?.stargazersCount !== repo.stargazerCount
+              ? [repo.stargazerCount]
+              : []
+          ),
         reasons: buildMomentumReasons(entry),
       } satisfies PortfolioAnalyticsRepo,
     ];
@@ -952,68 +1588,33 @@ async function buildAnalyticsModel(input: {
   };
 }
 
-async function buildReportsModel(input: {
+async function buildAnalyticsModel(input: {
   repositories: RepoCatalog[];
   states: UserRepoState[];
   notes: UserNote[];
+  events: PortfolioEvent[];
+  snapshots: RepoSnapshotDaily[];
+  githubLogin: string | null;
+}): Promise<PortfolioAnalyticsModel> {
+  return buildAnalyticsModelSync(input);
+}
+
+function buildReportsModel(input: {
+  repositories: RepoCatalog[];
+  reports: ReportSnapshot[];
   githubLogin: string | null;
   lastSyncedAt: Date | null;
-}): Promise<PortfolioReportsModel> {
-  const now = new Date();
-  const analytics = await buildAnalyticsModel({
-    repositories: input.repositories,
-    states: input.states,
-    notes: input.notes,
-    githubLogin: input.githubLogin,
-  });
-  const neglectSignals = generateNeglectSignals({
-    now,
-    states: input.states,
-    notes: input.notes,
-    events: [],
-  });
-  const repoClusters = buildRuntimeRepoClusters({
-    repositories: input.repositories,
-    states: input.states,
-  });
-  const clusterNarratives = await buildClusterNarratives({
-    clusters: repoClusters,
-    repositories: input.repositories,
-    momentumByRepoId: new Map(
-      analytics.topRepos.map((repo) => {
-        const matching = input.repositories.find((candidate) => candidate.fullName === repo.fullName);
-        return [matching?.id ?? repo.fullName.toLowerCase(), repo.momentumScore] as const;
-      })
-    ),
-  });
+  hasImport: boolean;
+}): PortfolioReportsModel {
   const repoById = new Map(input.repositories.map((repo) => [repo.id, repo.fullName]));
 
-  const reports = (["weekly", "monthly"] as const).map((period) => {
-    const report = generateReport({
-      id: `${period}-${input.githubLogin ?? "portfolio"}`,
-      period,
-      generatedAt: input.lastSyncedAt ?? now,
-      metrics: analytics.metrics,
-      momentum: analytics.topRepos.map((repo) => {
-        const matching = input.repositories.find((candidate) => candidate.fullName === repo.fullName);
-        return {
-          repoId: matching?.id ?? repo.fullName.toLowerCase(),
-          score: repo.momentumScore,
-          starDelta7d: 0,
-          forkDelta30d: 0,
-          pushRecency: 0,
-          releaseRecency: 0,
-          userTouch14d: 0,
-        };
-      }),
-      neglectSignals,
-      clusters: clusterNarratives,
-      repositories: input.repositories,
-    });
-
-    return {
+  return {
+    hasImport: input.hasImport,
+    githubLogin: input.githubLogin,
+    lastSyncedAt: input.lastSyncedAt,
+    reports: input.reports.map((report) => ({
       id: report.id,
-      title: `${period === "weekly" ? "Weekly" : "Monthly"} live portfolio review`,
+      title: report.period === "weekly" ? "Weekly live portfolio review" : "Monthly live portfolio review",
       period: report.period,
       generatedAt: report.generatedAt,
       summary: report.summary,
@@ -1025,44 +1626,8 @@ async function buildReportsModel(input: {
           .map((repoId) => repoById.get(repoId))
           .filter((value): value is string => Boolean(value)),
       })),
-    } satisfies PortfolioRenderedReport;
-  });
-
-  return {
-    hasImport: input.states.length > 0,
-    githubLogin: input.githubLogin,
-    lastSyncedAt: input.lastSyncedAt,
-    reports,
+    })),
   };
-}
-
-function buildRuntimeRepoClusters(input: {
-  repositories: RepoCatalog[];
-  states: UserRepoState[];
-}) {
-  const grouped = new Map<string, { label: string; repoIds: string[] }>();
-  const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
-
-  for (const state of input.states) {
-    const repo = repoById.get(state.repoId);
-    if (!repo) {
-      continue;
-    }
-
-    const label = repo.topics[0] ?? repo.language ?? "uncategorized";
-    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const next = grouped.get(key) ?? { label, repoIds: [] };
-    next.repoIds.push(repo.id);
-    grouped.set(key, next);
-  }
-
-  return [...grouped.entries()].map(([key, value]) => ({
-    id: `cluster-${key}`,
-    label: value.label,
-    repoIds: value.repoIds,
-    topicSeed: value.label,
-    languageSeed: null,
-  }));
 }
 
 function buildRepoClusters(input: {
@@ -1147,4 +1712,5 @@ export function resetTestPortfolioRuntime() {
   };
 
   delete globalScope.__gharsTestRuntime;
+  rmSync(TEST_RUNTIME_STATE_DIR, { recursive: true, force: true });
 }

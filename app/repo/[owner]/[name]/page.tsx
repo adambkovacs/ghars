@@ -2,8 +2,12 @@ import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
+import { addRepoNoteAction, changeRepoStateAction } from "@/app/repo/[owner]/[name]/actions";
+import { Sparkline } from "@/components/charts/sparkline";
 import { AppChrome } from "@/components/layout/app-chrome";
 import { SectionCard } from "@/components/layout/section-card";
+import { RepoNoteForm } from "@/components/repo/repo-note-form";
+import { RepoStateForm } from "@/components/repo/repo-state-form";
 import { getPortfolioRuntime } from "@/lib/server/portfolio/runtime";
 
 type RepoPageProps = {
@@ -60,6 +64,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
       title={repo.fullName}
       subtitle={repo.description}
       badge={state.state}
+      viewerLabel={detail.githubLogin ?? session.githubLogin ?? session.user.name ?? session.user.id}
     >
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SectionCard
@@ -91,6 +96,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
                 <p className="mt-2 text-2xl font-semibold text-cyan-100">{repo.stargazerCount.toLocaleString()}</p>
               </div>
             </div>
+            <RepoStateForm repoFullName={repo.fullName} currentState={state.state} action={changeRepoStateAction} />
           </div>
         </SectionCard>
 
@@ -121,6 +127,26 @@ export default async function RepoPage({ params }: RepoPageProps) {
               <p className="mt-2 text-2xl font-semibold text-white">{detail.notes.length}</p>
             </div>
           </div>
+          <div className="mt-4 rounded-[1.5rem] border border-white/8 bg-slate-950/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] uppercase tracking-[0.2em] text-slate-400">Star history</p>
+                <p className="mt-1 text-sm text-slate-300/82">
+                  Snapshot-backed growth from your imported portfolio refreshes.
+                </p>
+              </div>
+              <p className="text-sm text-slate-300/82">{detail.starHistory.length} snapshots</p>
+            </div>
+            <div className="mt-4 h-24">
+              <Sparkline
+                values={
+                  detail.starHistory.length > 0
+                    ? detail.starHistory.map((point) => point.stars)
+                    : [repo.stargazerCount]
+                }
+              />
+            </div>
+          </div>
         </SectionCard>
       </div>
 
@@ -130,7 +156,8 @@ export default async function RepoPage({ params }: RepoPageProps) {
           title="Memory trail"
           description="Personal context is the difference between a star and a system."
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
+            <RepoNoteForm repoFullName={repo.fullName} action={addRepoNoteAction} />
             {detail.notes.length > 0 ? (
               detail.notes.map((note) => (
                 <div key={note.id} className="rounded-[1.5rem] border border-white/8 bg-white/[0.025] p-4 text-sm text-slate-200/85">
@@ -142,7 +169,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
               ))
             ) : (
               <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.02] p-4 text-sm text-slate-300/75">
-                No personal notes yet. The repo detail route is live now, but note editing is still a follow-up slice.
+                No personal notes yet. Add the first one above and it will feed search, analytics, and future reports.
               </div>
             )}
           </div>

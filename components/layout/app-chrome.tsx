@@ -19,10 +19,11 @@ type AppChromeProps = {
   subtitle: string;
   eyebrow?: string;
   badge?: string;
+  viewerLabel?: string | null;
   children: ReactNode;
 };
 
-export function AppChrome({ title, subtitle, eyebrow, badge, children }: AppChromeProps) {
+export function AppChrome({ title, subtitle, eyebrow, badge, viewerLabel, children }: AppChromeProps) {
   const pathname = usePathname();
 
   return (
@@ -100,6 +101,11 @@ export function AppChrome({ title, subtitle, eyebrow, badge, children }: AppChro
                     {badge}
                   </span>
                 ) : null}
+                {viewerLabel ? (
+                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
+                    Portfolio: {viewerLabel}
+                  </span>
+                ) : null}
                 <Link
                   href="/search"
                   className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:border-white/20 hover:bg-white/10"
@@ -107,10 +113,10 @@ export function AppChrome({ title, subtitle, eyebrow, badge, children }: AppChro
                   Open command search
                 </Link>
                 <Link
-                  href="/sign-in"
+                  href="/dashboard"
                   className="inline-flex items-center rounded-full bg-gradient-to-r from-amber-300 via-orange-400 to-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_16px_36px_rgba(249,115,22,0.32)] transition hover:translate-y-[-1px]"
                 >
-                  Connect GitHub
+                  Open portfolio pulse
                 </Link>
               </div>
             </div>

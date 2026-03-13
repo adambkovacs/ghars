@@ -1,5 +1,5 @@
-import type { NeglectSignal, PortfolioEvent, UserNote, UserRepoState } from "@/lib/domain/types";
-import { daysBetween } from "@/lib/domain/utils";
+import type { NeglectSignal, PortfolioEvent, UserNote, UserRepoState } from "../domain/types";
+import { daysBetween } from "../domain/utils";
 
 export function generateNeglectSignals(input: {
   now: Date;
@@ -15,6 +15,10 @@ export function generateNeglectSignals(input: {
   }
 
   for (const event of input.events) {
+    if (event.type === "repo_refreshed") {
+      continue;
+    }
+
     const current = recentTouchByRepo.get(event.repoId);
     if (!current || current < event.occurredAt) {
       recentTouchByRepo.set(event.repoId, event.occurredAt);

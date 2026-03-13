@@ -252,7 +252,15 @@ describe("portfolio services", () => {
           updatedAt: new Date("2026-01-01T00:00:00.000Z"),
         },
       ],
-      events: [],
+      events: [
+        {
+          id: "evt-1",
+          userId: "user-1",
+          repoId: "repo-1",
+          type: "repo_refreshed",
+          occurredAt: new Date("2026-03-10T00:00:00.000Z"),
+        },
+      ],
     });
 
     expect(momentum.starDelta7d).toBe(70);
