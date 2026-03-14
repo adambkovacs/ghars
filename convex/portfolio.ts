@@ -724,15 +724,13 @@ export const listRepoSnapshotsByFullNames = query({
     })
   ),
   handler: async (ctx, args) => {
-    const repos = await Promise.all(args.fullNames.map((fullName) => findRepoByFullName(ctx, fullName)));
-    const repoIds = repos
-      .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
-      .map((repo) => repo._id);
-    const fullNameByRepoId = new Map(
-      repos
-        .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo))
-        .map((repo) => [repo._id, repo.fullName])
-    );
+    const normalizedFullNames = [...new Set(args.fullNames.map((fullName) => fullName.toLowerCase()))];
+    const repoCatalog = await ctx.db.query("repoCatalog").collect();
+    const repos = normalizedFullNames
+      .map((fullName) => repoCatalog.find((repo) => repo.fullName.toLowerCase() === fullName) ?? null)
+      .filter((repo): repo is NonNullable<typeof repo> => Boolean(repo));
+    const repoIds = repos.map((repo) => repo._id);
+    const fullNameByRepoId = new Map(repos.map((repo) => [repo._id, repo.fullName]));
 
     const snapshots = await Promise.all(
       repoIds.map(async (repoId) => ({
@@ -741,7 +739,7 @@ export const listRepoSnapshotsByFullNames = query({
           .query("repoSnapshots")
           .withIndex("by_repoId", (q) => q.eq("repoId", repoId))
           .order("desc")
-          .collect(),
+          .take(16),
       }))
     );
 
